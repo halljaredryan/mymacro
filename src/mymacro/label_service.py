@@ -17,16 +17,18 @@ def _same_macros(food: models.Food, facts: schemas.NutritionFacts) -> bool:
     )
 
 
-def get_or_create_food_from_facts(db: Session, facts: schemas.NutritionFacts) -> models.Food:
+def get_or_create_food_from_facts(
+    db: Session, facts: schemas.NutritionFacts, *, food_name: str
+) -> models.Food:
     """Reuse an existing food with the same name/macros, otherwise create one."""
     serving_label = f"{facts.serving_size_g:g}g serving"
-    existing = crud.get_food_by_name(db, facts.product_name)
+    existing = crud.get_food_by_name(db, food_name)
     if existing and _same_macros(existing, facts):
         return existing
 
-    name = facts.product_name
+    name = food_name
     if existing:
-        name = f"{facts.product_name} ({serving_label})"
+        name = f"{food_name} ({serving_label})"
         existing_alt = crud.get_food_by_name(db, name)
         if existing_alt and _same_macros(existing_alt, facts):
             return existing_alt
@@ -57,12 +59,18 @@ def scan_and_log(
     content_type: str,
     grams: float,
     day: date,
+    label: str,
     meal: str = "snack",
     notes: str | None = None,
 ) -> schemas.LabelScanResult:
+    label_name = label.strip()
+    if not label_name:
+        raise ValueError("label is required")
+
     facts = reader.read(image_bytes, content_type=content_type)
     servings, scaled = scale_macros_for_grams(facts, grams)
-    food = get_or_create_food_from_facts(db, facts)
+    food = get_or_create_food_from_facts(db, facts, food_name=label_name)
+    saved = crud.create_saved_label(db, label=label_name, facts=facts, food_id=food.id)
     entry = crud.create_entry(
         db,
         schemas.FoodEntryCreate(
@@ -70,14 +78,16 @@ def scan_and_log(
             day=day,
             servings=servings,
             meal=meal,
-            notes=notes or f"Scanned label · {grams:g}g",
+            notes=notes or f"Scanned label · {label_name} · {grams:g}g",
         ),
     )
     return schemas.LabelScanResult(
         facts=facts,
+        label=label_name,
         grams=grams,
         servings=round(servings, 4),
         scaled_macros=schemas.Macros(**scaled),
+        saved_label=schemas.SavedLabelRead.model_validate(saved),
         food=schemas.FoodRead.model_validate(food),
         entry=services.to_entry_read(entry),
         summary=services.day_summary(db, day),

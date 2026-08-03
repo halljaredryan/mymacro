@@ -84,3 +84,49 @@ def delete_entry(db: Session, entry_id: int) -> bool:
     db.delete(entry)
     db.commit()
     return True
+
+
+def create_saved_label(
+    db: Session,
+    *,
+    label: str,
+    facts: schemas.NutritionFacts,
+    food_id: int | None,
+) -> models.SavedLabel:
+    saved = models.SavedLabel(
+        label=label.strip()[:200],
+        serving_size_g=facts.serving_size_g,
+        calories=facts.calories,
+        protein_g=facts.protein_g,
+        carbs_g=facts.carbs_g,
+        fat_g=facts.fat_g,
+        ocr_product_name=facts.product_name,
+        raw_text=facts.raw_text,
+        food_id=food_id,
+    )
+    db.add(saved)
+    db.commit()
+    db.refresh(saved)
+    return saved
+
+
+def list_saved_labels(db: Session) -> list[models.SavedLabel]:
+    return list(
+        db.scalars(select(models.SavedLabel).order_by(models.SavedLabel.created_at.desc())).all()
+    )
+
+
+def get_saved_label(db: Session, label_id: int) -> models.SavedLabel | None:
+    return db.get(models.SavedLabel, label_id)
+
+
+def update_saved_label(
+    db: Session, label_id: int, payload: schemas.SavedLabelUpdate
+) -> models.SavedLabel | None:
+    saved = db.get(models.SavedLabel, label_id)
+    if not saved:
+        return None
+    saved.label = payload.label.strip()[:200]
+    db.commit()
+    db.refresh(saved)
+    return saved

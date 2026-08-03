@@ -6,9 +6,10 @@
 
 **mymacro** is a FastAPI nutrition macro-tracking app (SQLite by default).
 
-- Scan UI: `http://127.0.0.1:8000/` (camera/file upload + grams → logs intake)
+- Scan UI: `http://127.0.0.1:8000/` (live webcam via `getUserMedia`, or file upload)
 - API docs: `/docs`
-- Core scan endpoint: `POST /labels/scan` (multipart: `image`, `grams`, optional `day`/`meal`/`notes`)
+- Core scan endpoint: `POST /labels/scan` (multipart: `image`, **`label`**, `grams`, optional `day`/`meal`/`notes`)
+- Every scan persists a `SavedLabel` (`GET /labels`, rename via `PATCH /labels/{id}`)
 
 ### Run / lint / test
 
@@ -23,6 +24,8 @@ Standard commands are in `README.md` and `pyproject.toml`. After `pip install -e
 - Prefer OpenAI vision when `MYMACRO_OPENAI_API_KEY` or `OPENAI_API_KEY` is set.
 - Otherwise uses Tesseract OCR. The binary is a **system** package (`tesseract-ocr`); install once on the VM if missing — it is not part of the pip update script.
 - Scaling math: `servings = grams_eaten / label_serving_size_g`, then multiply label macros by servings.
+- `label` is required on scan — user-facing name stored on `saved_labels` (OCR product name kept separately as `ocr_product_name`).
+- Webcam needs a secure context (localhost/https) and browser permission; file upload remains as fallback.
 - Tests mock the label reader except `test_tesseract_reader_on_synthetic_label`, which skips if Tesseract is absent.
 
 ### Gotchas

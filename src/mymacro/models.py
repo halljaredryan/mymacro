@@ -63,3 +63,23 @@ class FoodEntry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     food: Mapped[Food] = relationship(back_populates="entries")
+
+
+class SavedLabel(Base):
+    """A scanned nutrition label saved with a user-chosen name."""
+
+    __tablename__ = "saved_labels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    label: Mapped[str] = mapped_column(String(200), index=True)
+    serving_size_g: Mapped[float] = mapped_column(Float)
+    calories: Mapped[float] = mapped_column(Float)
+    protein_g: Mapped[float] = mapped_column(Float)
+    carbs_g: Mapped[float] = mapped_column(Float)
+    fat_g: Mapped[float] = mapped_column(Float)
+    ocr_product_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    food_id: Mapped[int | None] = mapped_column(ForeignKey("foods.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    food: Mapped[Food | None] = relationship()

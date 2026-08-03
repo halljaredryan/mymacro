@@ -105,6 +105,21 @@ def day_summary(day: date, db: DbSession) -> schemas.DaySummary:
     return services.day_summary(db, day)
 
 
+@app.get("/labels", response_model=list[schemas.SavedLabelRead])
+def list_saved_labels(db: DbSession) -> list[schemas.SavedLabelRead]:
+    return [schemas.SavedLabelRead.model_validate(item) for item in crud.list_saved_labels(db)]
+
+
+@app.patch("/labels/{label_id}", response_model=schemas.SavedLabelRead)
+def rename_saved_label(
+    label_id: int, payload: schemas.SavedLabelUpdate, db: DbSession
+) -> schemas.SavedLabelRead:
+    saved = crud.update_saved_label(db, label_id, payload)
+    if not saved:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved label not found")
+    return schemas.SavedLabelRead.model_validate(saved)
+
+
 @app.post(
     "/labels/scan",
     response_model=schemas.LabelScanResult,
@@ -115,11 +130,12 @@ async def scan_label(
     reader: LabelReaderDep,
     image: Annotated[UploadFile, File(description="Photo of the nutrition facts label")],
     grams: Annotated[float, Form(gt=0, description="How many grams you ate")],
+    label: Annotated[str, Form(min_length=1, max_length=200, description="Name for this label")],
     day: Annotated[date | None, Form()] = None,
     meal: Annotated[str, Form()] = "snack",
     notes: Annotated[str | None, Form()] = None,
 ) -> schemas.LabelScanResult:
-    """Read a nutrition label image, scale macros by grams eaten, and log intake."""
+    """Read a nutrition label image, save it under a name, scale by grams, and log intake."""
     content_type = image.content_type or "image/jpeg"
     if not content_type.startswith("image/"):
         raise HTTPException(
@@ -131,6 +147,8 @@ async def scan_label(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty image upload")
     if grams <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="grams must be > 0")
+    if not label.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="label is required")
 
     try:
         return label_service.scan_and_log(
@@ -140,6 +158,7 @@ async def scan_label(
             content_type=content_type,
             grams=grams,
             day=day or date.today(),
+            label=label,
             meal=meal,
             notes=notes,
         )

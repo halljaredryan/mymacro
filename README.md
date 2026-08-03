@@ -27,7 +27,7 @@ sudo apt-get install -y tesseract-ocr
 uvicorn mymacro.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-- Scan UI (camera / file upload): http://127.0.0.1:8000/
+- Scan UI (live webcam + file upload): http://127.0.0.1:8000/
 - Interactive docs: http://127.0.0.1:8000/docs
 - Health: http://127.0.0.1:8000/health
 
@@ -54,7 +54,9 @@ pytest
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `POST` | `/labels/scan` | Upload label photo + grams → parse, scale, log |
+| `POST` | `/labels/scan` | Webcam/photo + **label name** + grams → parse, **save**, scale, log |
+| `GET` | `/labels` | List saved scanned labels |
+| `PATCH` | `/labels/{id}` | Rename a saved label |
 | `POST` | `/foods` | Create a food with macros per serving |
 | `GET` | `/foods` | List foods |
 | `PUT` | `/goals` | Set / update daily macro goals |
@@ -76,11 +78,15 @@ Example: label serving 32g / 190 kcal → eating 16g logs 0.5 serving → 95 kca
 ### Quick example
 
 ```bash
-# Scan a nutrition label photo and log 50g
+# Scan a nutrition label photo, save it as a named label, and log 50g
 curl -s -X POST http://127.0.0.1:8000/labels/scan \
   -F "image=@./label.jpg" \
+  -F "label=Oat crackers" \
   -F "grams=50" \
   -F "meal=snack"
+
+# List saved labels
+curl -s http://127.0.0.1:8000/labels
 
 # Create a food manually
 curl -s -X POST http://127.0.0.1:8000/foods \

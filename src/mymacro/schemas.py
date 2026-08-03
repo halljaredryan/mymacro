@@ -82,11 +82,33 @@ class NutritionFacts(BaseModel):
     raw_text: str | None = None
 
 
+class SavedLabelRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    label: str
+    serving_size_g: float
+    calories: float
+    protein_g: float
+    carbs_g: float
+    fat_g: float
+    ocr_product_name: str | None
+    raw_text: str | None
+    food_id: int | None
+    created_at: datetime
+
+
+class SavedLabelUpdate(BaseModel):
+    label: str = Field(min_length=1, max_length=200)
+
+
 class LabelScanResult(BaseModel):
     facts: NutritionFacts
+    label: str
     grams: float
     servings: float
     scaled_macros: Macros
+    saved_label: SavedLabelRead
     food: FoodRead
     entry: FoodEntryRead
     summary: DaySummary

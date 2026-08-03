@@ -26,7 +26,7 @@
       min-height: 100vh;
     }
     main {
-      max-width: 560px;
+      max-width: 640px;
       margin: 0 auto;
       padding: 2rem 1.25rem 3rem;
     }
@@ -37,12 +37,17 @@
       margin: 0 0 0.35rem;
       letter-spacing: -0.02em;
     }
+    h2 {
+      font-size: 1.1rem;
+      margin: 0 0 0.75rem;
+      font-weight: 600;
+    }
     .lede {
       color: var(--muted);
       margin: 0 0 1.75rem;
       line-height: 1.45;
     }
-    form {
+    form, .panel {
       display: grid;
       gap: 1rem;
       padding: 1.25rem;
@@ -57,6 +62,7 @@
     input[type="number"],
     input[type="date"],
     input[type="text"],
+    input[type="file"],
     select {
       width: 100%;
       padding: 0.7rem 0.8rem;
@@ -65,30 +71,61 @@
       color: var(--ink);
       font: inherit;
     }
-    .preview {
+    .stage {
+      position: relative;
       aspect-ratio: 4 / 3;
-      border: 1px dashed var(--border);
-      display: grid;
-      place-items: center;
+      border: 1px solid var(--border);
       overflow: hidden;
       background: #101612;
       color: var(--muted);
       font-size: 0.9rem;
     }
-    .preview img {
+    .stage video,
+    .stage img,
+    .stage canvas {
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: cover;
+      display: block;
+    }
+    .stage .placeholder {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      text-align: center;
+    }
+    .cam-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .cam-actions button,
+    .secondary {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--border);
+      font: inherit;
+      font-weight: 600;
+      padding: 0.7rem 0.9rem;
+      cursor: pointer;
+    }
+    .cam-actions button.primary,
+    button[type="submit"] {
+      border: 0;
+      background: var(--accent);
+      color: var(--accent-ink);
     }
     .row {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 0.75rem;
     }
-    button {
-      border: 0;
-      background: var(--accent);
-      color: var(--accent-ink);
+    @media (max-width: 560px) {
+      .row { grid-template-columns: 1fr; }
+    }
+    button[type="submit"] {
       font: inherit;
       font-weight: 600;
       padding: 0.85rem 1rem;
@@ -99,11 +136,10 @@
       cursor: wait;
     }
     .result, .error {
-      margin-top: 1.25rem;
+      margin-top: 0.25rem;
       padding: 1rem 1.1rem;
       border: 1px solid var(--border);
       background: var(--panel);
-      white-space: pre-wrap;
       line-height: 1.45;
     }
     .error { border-color: var(--danger); color: #ffd0d0; }
@@ -122,23 +158,60 @@
     .macros strong { display: block; font-size: 1.05rem; }
     .macros span { color: var(--muted); font-size: 0.75rem; }
     a.doc { color: var(--accent); }
+    .saved-list {
+      display: grid;
+      gap: 0.65rem;
+      margin-top: 1.5rem;
+    }
+    .saved-item {
+      display: grid;
+      gap: 0.35rem;
+      padding: 0.85rem 0.95rem;
+      border: 1px solid var(--border);
+      background: var(--panel);
+    }
+    .saved-item strong { font-size: 1rem; }
+    .saved-item .meta { color: var(--muted); font-size: 0.85rem; }
+    .hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
+    .status { color: var(--muted); font-size: 0.85rem; min-height: 1.2em; }
   </style>
 </head>
 <body>
   <main>
     <h1>mymacro</h1>
     <p class="lede">
-      Photograph a nutrition label, enter how many grams you ate, and we’ll add the
-      scaled macros to your day.
+      Point your webcam at a nutrition label (or upload a photo), name it, enter grams eaten,
+      and we’ll save the facts and add scaled macros to your day.
       <a class="doc" href="/docs">API docs</a>
     </p>
 
     <form id="scan-form">
+      <div>
+        <h2>1. Capture label</h2>
+        <div class="stage" id="stage">
+          <video id="webcam" playsinline autoplay muted hidden></video>
+          <img id="snapshot" alt="Captured nutrition label" hidden />
+          <div class="placeholder" id="placeholder">Start the webcam or choose a photo</div>
+        </div>
+        <canvas id="capture-canvas" hidden></canvas>
+        <div class="cam-actions" style="margin-top:0.75rem">
+          <button type="button" class="primary" id="start-cam">Start webcam</button>
+          <button type="button" id="capture-btn" disabled>Capture frame</button>
+          <button type="button" id="retake-btn" disabled>Retake</button>
+          <button type="button" id="stop-cam" disabled>Stop webcam</button>
+        </div>
+        <p class="status" id="cam-status"></p>
+        <label style="margin-top:0.5rem">
+          Or upload a photo
+          <input id="image" name="image" type="file" accept="image/*" capture="environment" />
+        </label>
+      </div>
+
       <label>
-        Nutrition label photo
-        <input id="image" name="image" type="file" accept="image/*" capture="environment" required />
+        Label name
+        <input id="label" name="label" type="text" maxlength="200" placeholder="e.g. Trader Joe's peanut butter" required />
       </label>
-      <div class="preview" id="preview">Label preview</div>
+
       <div class="row">
         <label>
           Grams eaten
@@ -164,28 +237,188 @@
           <input id="notes" name="notes" type="text" placeholder="e.g. post-workout" />
         </label>
       </div>
-      <button type="submit" id="submit">Scan &amp; add to today</button>
+      <p class="hint">Every scan is saved under the label name with the parsed nutrition facts.</p>
+      <button type="submit" id="submit">Scan, save &amp; log</button>
     </form>
 
     <div id="out" hidden></div>
+
+    <section class="saved-list" aria-live="polite">
+      <h2>Saved labels</h2>
+      <div id="saved-labels"><p class="hint">No saved labels yet.</p></div>
+    </section>
   </main>
   <script>
     const form = document.getElementById("scan-form");
     const imageInput = document.getElementById("image");
-    const preview = document.getElementById("preview");
+    const webcam = document.getElementById("webcam");
+    const snapshot = document.getElementById("snapshot");
+    const placeholder = document.getElementById("placeholder");
+    const canvas = document.getElementById("capture-canvas");
+    const camStatus = document.getElementById("cam-status");
+    const startCam = document.getElementById("start-cam");
+    const captureBtn = document.getElementById("capture-btn");
+    const retakeBtn = document.getElementById("retake-btn");
+    const stopCam = document.getElementById("stop-cam");
     const out = document.getElementById("out");
     const submit = document.getElementById("submit");
+    const savedLabelsEl = document.getElementById("saved-labels");
     document.getElementById("day").valueAsDate = new Date();
+
+    let mediaStream = null;
+    let capturedBlob = null;
+
+    function setStatus(message) {
+      camStatus.textContent = message || "";
+    }
+
+    function showLive() {
+      placeholder.hidden = true;
+      snapshot.hidden = true;
+      webcam.hidden = false;
+    }
+
+    function showSnapshot(url) {
+      placeholder.hidden = true;
+      webcam.hidden = true;
+      snapshot.src = url;
+      snapshot.hidden = false;
+    }
+
+    function showPlaceholder() {
+      webcam.hidden = true;
+      snapshot.hidden = true;
+      placeholder.hidden = false;
+    }
+
+    async function startWebcam() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setStatus("Webcam API not available in this browser.");
+        return;
+      }
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+        webcam.srcObject = mediaStream;
+        await webcam.play();
+        showLive();
+        captureBtn.disabled = false;
+        retakeBtn.disabled = true;
+        stopCam.disabled = false;
+        startCam.disabled = true;
+        capturedBlob = null;
+        imageInput.value = "";
+        setStatus("Webcam live — frame the nutrition facts, then Capture.");
+      } catch (err) {
+        setStatus(`Could not open webcam: ${err.message || err}`);
+      }
+    }
+
+    function stopWebcam() {
+      if (mediaStream) {
+        for (const track of mediaStream.getTracks()) track.stop();
+        mediaStream = null;
+      }
+      webcam.srcObject = null;
+      captureBtn.disabled = true;
+      stopCam.disabled = true;
+      startCam.disabled = false;
+      if (!capturedBlob && !imageInput.files?.length) {
+        showPlaceholder();
+        retakeBtn.disabled = true;
+      }
+      setStatus(capturedBlob ? "Using captured frame." : "");
+    }
+
+    function captureFrame() {
+      if (!mediaStream) return;
+      const width = webcam.videoWidth || 1280;
+      const height = webcam.videoHeight || 720;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(webcam, 0, 0, width, height);
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          setStatus("Failed to capture frame.");
+          return;
+        }
+        capturedBlob = blob;
+        imageInput.value = "";
+        showSnapshot(URL.createObjectURL(blob));
+        retakeBtn.disabled = false;
+        setStatus("Frame captured — add a label name and grams, then submit.");
+      }, "image/jpeg", 0.92);
+    }
+
+    function retake() {
+      capturedBlob = null;
+      if (mediaStream) {
+        showLive();
+        captureBtn.disabled = false;
+        retakeBtn.disabled = true;
+        setStatus("Webcam live — capture again when ready.");
+      } else {
+        showPlaceholder();
+        retakeBtn.disabled = true;
+        setStatus("");
+      }
+    }
+
+    startCam.addEventListener("click", startWebcam);
+    captureBtn.addEventListener("click", captureFrame);
+    retakeBtn.addEventListener("click", retake);
+    stopCam.addEventListener("click", stopWebcam);
 
     imageInput.addEventListener("change", () => {
       const file = imageInput.files?.[0];
-      if (!file) {
-        preview.textContent = "Label preview";
-        return;
-      }
-      const url = URL.createObjectURL(file);
-      preview.innerHTML = `<img alt="Selected nutrition label" src="${url}" />`;
+      if (!file) return;
+      capturedBlob = null;
+      stopWebcam();
+      showSnapshot(URL.createObjectURL(file));
+      retakeBtn.disabled = false;
+      setStatus("Using uploaded photo.");
     });
+
+    async function refreshSavedLabels() {
+      try {
+        const response = await fetch("/labels");
+        const items = await response.json();
+        if (!response.ok) throw new Error("Failed to load saved labels");
+        if (!items.length) {
+          savedLabelsEl.innerHTML = `<p class="hint">No saved labels yet.</p>`;
+          return;
+        }
+        savedLabelsEl.innerHTML = items.map((item) => `
+          <article class="saved-item">
+            <strong>${escapeHtml(item.label)}</strong>
+            <div class="meta">
+              Serving ${item.serving_size_g}g ·
+              ${item.calories} kcal ·
+              P ${item.protein_g}g ·
+              C ${item.carbs_g}g ·
+              F ${item.fat_g}g
+            </div>
+            <div class="meta">
+              OCR name: ${escapeHtml(item.ocr_product_name || "—")} ·
+              saved ${new Date(item.created_at).toLocaleString()}
+            </div>
+          </article>
+        `).join("");
+      } catch (err) {
+        savedLabelsEl.innerHTML = `<p class="error">${escapeHtml(err.message || String(err))}</p>`;
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -193,8 +426,33 @@
       submit.disabled = true;
       submit.textContent = "Reading label…";
 
+      const label = document.getElementById("label").value.trim();
+      if (!label) {
+        out.className = "error";
+        out.textContent = "Please enter a label name.";
+        out.hidden = false;
+        submit.disabled = false;
+        submit.textContent = "Scan, save & log";
+        return;
+      }
+
+      let imageFile = null;
+      if (capturedBlob) {
+        imageFile = new File([capturedBlob], "webcam-capture.jpg", { type: "image/jpeg" });
+      } else if (imageInput.files?.[0]) {
+        imageFile = imageInput.files[0];
+      } else {
+        out.className = "error";
+        out.textContent = "Capture a webcam frame or upload a photo first.";
+        out.hidden = false;
+        submit.disabled = false;
+        submit.textContent = "Scan, save & log";
+        return;
+      }
+
       const data = new FormData();
-      data.append("image", imageInput.files[0]);
+      data.append("image", imageFile);
+      data.append("label", label);
       data.append("grams", document.getElementById("grams").value);
       data.append("day", document.getElementById("day").value);
       data.append("meal", document.getElementById("meal").value);
@@ -205,14 +463,16 @@
         const response = await fetch("/labels/scan", { method: "POST", body: data });
         const payload = await response.json();
         if (!response.ok) {
-          throw new Error(payload.detail || "Scan failed");
+          const detail = payload.detail;
+          throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
         }
         const m = payload.scaled_macros;
         const c = payload.summary.consumed;
         out.className = "result";
         out.innerHTML = `
-          <strong>${payload.facts.product_name}</strong>
-          <div>Label serving: ${payload.facts.serving_size_g}g · You logged: ${payload.grams}g (${payload.servings} servings)</div>
+          <strong>${escapeHtml(payload.label)}</strong>
+          <div>Saved label #${payload.saved_label.id} · OCR: ${escapeHtml(payload.facts.product_name)}</div>
+          <div>Label serving: ${payload.facts.serving_size_g}g · Logged: ${payload.grams}g (${payload.servings} servings)</div>
           <div class="macros">
             <div><strong>${m.calories}</strong><span>kcal added</span></div>
             <div><strong>${m.protein_g}g</strong><span>protein</span></div>
@@ -223,15 +483,19 @@
             Day total: ${c.calories} kcal · P ${c.protein_g}g · C ${c.carbs_g}g · F ${c.fat_g}g
           </div>`;
         out.hidden = false;
+        await refreshSavedLabels();
       } catch (err) {
         out.className = "error";
         out.textContent = err.message || String(err);
         out.hidden = false;
       } finally {
         submit.disabled = false;
-        submit.textContent = "Scan & add to today";
+        submit.textContent = "Scan, save & log";
       }
     });
+
+    refreshSavedLabels();
+    window.addEventListener("beforeunload", stopWebcam);
   </script>
 </body>
 </html>
