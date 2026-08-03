@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from mymacro.schemas import NutritionFacts
 
@@ -42,9 +43,39 @@ _PRODUCT = re.compile(
     re.IGNORECASE,
 )
 
+FIELD_KEYS = (
+    ("serving_size_g", "serving size (g)"),
+    ("calories", "calories"),
+    ("protein_g", "protein"),
+    ("carbs_g", "carbohydrates"),
+    ("fat_g", "fat"),
+)
+
 
 class LabelParseError(ValueError):
     """Raised when required nutrition fields cannot be extracted."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        missing: list[str] | None = None,
+        partial: dict[str, Any] | None = None,
+        raw_text: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.missing = missing or []
+        self.partial = partial or {}
+        self.raw_text = raw_text
+
+    def as_detail(self) -> dict[str, Any]:
+        return {
+            "message": str(self),
+            "missing": self.missing,
+            "partial": self.partial,
+            "raw_text": self.raw_text,
+            "manual_entry_required": True,
+        }
 
 
 def _first_float(pattern: re.Pattern[str], text: str) -> float | None:
@@ -75,39 +106,35 @@ def _product_name(text: str) -> str | None:
 def parse_nutrition_text(text: str, default_name: str = "Scanned food") -> NutritionFacts:
     """Extract serving size and macros from raw nutrition-label text."""
     cleaned = text.replace("\u00a0", " ")
-    serving_size_g = _serving_size_g(cleaned)
-    calories = _first_float(_CALORIES, cleaned)
-    protein_g = _first_float(_PROTEIN, cleaned)
-    carbs_g = _first_float(_CARBS, cleaned)
-    fat_g = _first_float(_FAT, cleaned)
+    values: dict[str, float | None] = {
+        "serving_size_g": _serving_size_g(cleaned),
+        "calories": _first_float(_CALORIES, cleaned),
+        "protein_g": _first_float(_PROTEIN, cleaned),
+        "carbs_g": _first_float(_CARBS, cleaned),
+        "fat_g": _first_float(_FAT, cleaned),
+    }
+    product_name = _product_name(cleaned) or default_name
+    missing_labels = [label for key, label in FIELD_KEYS if values[key] is None]
+    partial = {
+        "product_name": product_name,
+        **{key: values[key] for key, _ in FIELD_KEYS if values[key] is not None},
+    }
 
-    missing = [
-        name
-        for name, value in [
-            ("serving size (g)", serving_size_g),
-            ("calories", calories),
-            ("protein", protein_g),
-            ("carbohydrates", carbs_g),
-            ("fat", fat_g),
-        ]
-        if value is None
-    ]
-    if missing:
-        raise LabelParseError("Could not read nutrition facts. Missing: " + ", ".join(missing))
-
-    assert serving_size_g is not None
-    assert calories is not None
-    assert protein_g is not None
-    assert carbs_g is not None
-    assert fat_g is not None
+    if missing_labels:
+        raise LabelParseError(
+            "Could not read nutrition facts. Missing: " + ", ".join(missing_labels),
+            missing=missing_labels,
+            partial=partial,
+            raw_text=cleaned.strip(),
+        )
 
     return NutritionFacts(
-        product_name=_product_name(cleaned) or default_name,
-        serving_size_g=serving_size_g,
-        calories=calories,
-        protein_g=protein_g,
-        carbs_g=carbs_g,
-        fat_g=fat_g,
+        product_name=product_name,
+        serving_size_g=float(values["serving_size_g"]),  # type: ignore[arg-type]
+        calories=float(values["calories"]),  # type: ignore[arg-type]
+        protein_g=float(values["protein_g"]),  # type: ignore[arg-type]
+        carbs_g=float(values["carbs_g"]),  # type: ignore[arg-type]
+        fat_g=float(values["fat_g"]),  # type: ignore[arg-type]
         raw_text=cleaned.strip(),
     )
 

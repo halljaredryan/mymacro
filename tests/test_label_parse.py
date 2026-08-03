@@ -36,5 +36,11 @@ def test_scale_macros_for_partial_serving():
 
 
 def test_parse_missing_fields():
-    with pytest.raises(LabelParseError, match="Missing"):
+    with pytest.raises(LabelParseError, match="Missing") as exc_info:
         parse_nutrition_text("Calories 100\nProtein 10g")
+    err = exc_info.value
+    assert "serving size (g)" in err.missing
+    assert err.partial["calories"] == 100
+    assert err.partial["protein_g"] == 10
+    detail = err.as_detail()
+    assert detail["manual_entry_required"] is True

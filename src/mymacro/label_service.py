@@ -51,6 +51,44 @@ def get_or_create_food_from_facts(
         raise
 
 
+def _log_facts(
+    db: Session,
+    *,
+    facts: schemas.NutritionFacts,
+    label_name: str,
+    grams: float,
+    day: date,
+    meal: str,
+    notes: str | None,
+    source: str,
+) -> schemas.LabelScanResult:
+    servings, scaled = scale_macros_for_grams(facts, grams)
+    food = get_or_create_food_from_facts(db, facts, food_name=label_name)
+    saved = crud.create_saved_label(db, label=label_name, facts=facts, food_id=food.id)
+    entry = crud.create_entry(
+        db,
+        schemas.FoodEntryCreate(
+            food_id=food.id,
+            day=day,
+            servings=servings,
+            meal=meal,
+            notes=notes or f"{source} label · {label_name} · {grams:g}g",
+        ),
+    )
+    return schemas.LabelScanResult(
+        facts=facts,
+        label=label_name,
+        grams=grams,
+        servings=round(servings, 4),
+        scaled_macros=schemas.Macros(**scaled),
+        saved_label=schemas.SavedLabelRead.model_validate(saved),
+        food=schemas.FoodRead.model_validate(food),
+        entry=services.to_entry_read(entry),
+        summary=services.day_summary(db, day),
+        source=source,
+    )
+
+
 def scan_and_log(
     db: Session,
     reader: LabelReader,
@@ -68,27 +106,42 @@ def scan_and_log(
         raise ValueError("label is required")
 
     facts = reader.read(image_bytes, content_type=content_type)
-    servings, scaled = scale_macros_for_grams(facts, grams)
-    food = get_or_create_food_from_facts(db, facts, food_name=label_name)
-    saved = crud.create_saved_label(db, label=label_name, facts=facts, food_id=food.id)
-    entry = crud.create_entry(
+    return _log_facts(
         db,
-        schemas.FoodEntryCreate(
-            food_id=food.id,
-            day=day,
-            servings=servings,
-            meal=meal,
-            notes=notes or f"Scanned label · {label_name} · {grams:g}g",
-        ),
-    )
-    return schemas.LabelScanResult(
         facts=facts,
-        label=label_name,
+        label_name=label_name,
         grams=grams,
-        servings=round(servings, 4),
-        scaled_macros=schemas.Macros(**scaled),
-        saved_label=schemas.SavedLabelRead.model_validate(saved),
-        food=schemas.FoodRead.model_validate(food),
-        entry=services.to_entry_read(entry),
-        summary=services.day_summary(db, day),
+        day=day,
+        meal=meal,
+        notes=notes,
+        source="scan",
+    )
+
+
+def manual_and_log(
+    db: Session,
+    payload: schemas.ManualNutritionFacts,
+) -> schemas.LabelScanResult:
+    label_name = payload.label.strip()
+    if not label_name:
+        raise ValueError("label is required")
+
+    facts = schemas.NutritionFacts(
+        product_name=(payload.product_name or label_name).strip() or label_name,
+        serving_size_g=payload.serving_size_g,
+        calories=payload.calories,
+        protein_g=payload.protein_g,
+        carbs_g=payload.carbs_g,
+        fat_g=payload.fat_g,
+        raw_text=payload.raw_text,
+    )
+    return _log_facts(
+        db,
+        facts=facts,
+        label_name=label_name,
+        grams=payload.grams,
+        day=payload.day or date.today(),
+        meal=payload.meal,
+        notes=payload.notes,
+        source="manual",
     )

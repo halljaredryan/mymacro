@@ -164,8 +164,22 @@ async def scan_label(
         )
     except LabelParseError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=exc.as_detail(),
         ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@app.post(
+    "/labels/manual",
+    response_model=schemas.LabelScanResult,
+    status_code=status.HTTP_201_CREATED,
+)
+def manual_label(payload: schemas.ManualNutritionFacts, db: DbSession) -> schemas.LabelScanResult:
+    """Save nutrition facts entered manually (OCR fallback) and log grams eaten."""
+    try:
+        return label_service.manual_and_log(db, payload)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

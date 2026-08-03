@@ -102,6 +102,23 @@ class SavedLabelUpdate(BaseModel):
     label: str = Field(min_length=1, max_length=200)
 
 
+class ManualNutritionFacts(BaseModel):
+    """User-supplied nutrition facts when OCR cannot read the label."""
+
+    label: str = Field(min_length=1, max_length=200)
+    serving_size_g: float = Field(gt=0)
+    calories: float = Field(ge=0)
+    protein_g: float = Field(ge=0)
+    carbs_g: float = Field(ge=0)
+    fat_g: float = Field(ge=0)
+    grams: float = Field(gt=0)
+    day: date | None = None
+    meal: str = Field(default="snack", max_length=50)
+    notes: str | None = None
+    product_name: str | None = None
+    raw_text: str | None = None
+
+
 class LabelScanResult(BaseModel):
     facts: NutritionFacts
     label: str
@@ -112,3 +129,4 @@ class LabelScanResult(BaseModel):
     food: FoodRead
     entry: FoodEntryRead
     summary: DaySummary
+    source: str = "scan"

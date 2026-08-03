@@ -132,6 +132,65 @@ def test_ui_has_webcam_controls(client):
     assert "getUserMedia" in response.text
     assert "Start webcam" in response.text
     assert 'name="label"' in response.text or 'id="label"' in response.text
+    assert "manual-panel" in response.text
+    assert "/labels/manual" in response.text
+
+
+def test_scan_parse_error_returns_manual_entry_payload(client):
+    class BrokenReader:
+        def read(self, image_bytes: bytes, content_type: str = "image/jpeg"):
+            from mymacro.label_parse import LabelParseError
+
+            raise LabelParseError(
+                "Could not read nutrition facts. Missing: serving size (g)",
+                missing=["serving size (g)"],
+                partial={"calories": 120, "protein_g": 5, "carbs_g": 10, "fat_g": 2},
+                raw_text="Calories 120",
+            )
+
+    set_label_reader(BrokenReader())
+    try:
+        response = client.post(
+            "/labels/scan",
+            data={"grams": "40", "label": "Mystery bar"},
+            files={"image": ("label.png", _tiny_png(), "image/png")},
+        )
+    finally:
+        set_label_reader(None)
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["manual_entry_required"] is True
+    assert "serving size (g)" in detail["missing"]
+    assert detail["partial"]["calories"] == 120
+
+
+def test_manual_label_logs_intake(client):
+    today = date.today().isoformat()
+    response = client.post(
+        "/labels/manual",
+        json={
+            "label": "Manual granola",
+            "serving_size_g": 40,
+            "calories": 180,
+            "protein_g": 4,
+            "carbs_g": 30,
+            "fat_g": 6,
+            "grams": 20,
+            "day": today,
+            "meal": "breakfast",
+        },
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["source"] == "manual"
+    assert body["label"] == "Manual granola"
+    assert body["servings"] == 0.5
+    assert body["scaled_macros"]["calories"] == 90.0
+    assert body["saved_label"]["serving_size_g"] == 40
+
+    listed = client.get("/labels")
+    assert any(item["label"] == "Manual granola" for item in listed.json())
 
 
 def test_tesseract_reader_on_synthetic_label():

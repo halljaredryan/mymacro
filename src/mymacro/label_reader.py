@@ -82,18 +82,42 @@ class OpenAIVisionLabelReader:
             )
         content = response.json()["choices"][0]["message"]["content"]
         data = json.loads(content)
-        try:
-            return NutritionFacts(
-                product_name=data.get("product_name") or "Scanned food",
-                serving_size_g=float(data["serving_size_g"]),
-                calories=float(data["calories"]),
-                protein_g=float(data["protein_g"]),
-                carbs_g=float(data["carbs_g"]),
-                fat_g=float(data["fat_g"]),
+        key_map = {
+            "serving_size_g": "serving size (g)",
+            "calories": "calories",
+            "protein_g": "protein",
+            "carbs_g": "carbohydrates",
+            "fat_g": "fat",
+        }
+        partial: dict = {"product_name": data.get("product_name") or "Scanned food"}
+        missing: list[str] = []
+        parsed: dict[str, float] = {}
+        for key, label in key_map.items():
+            raw = data.get(key)
+            if raw is None or raw == "":
+                missing.append(label)
+                continue
+            try:
+                parsed[key] = float(raw)
+                partial[key] = parsed[key]
+            except (TypeError, ValueError):
+                missing.append(label)
+        if missing:
+            raise LabelParseError(
+                "Could not read nutrition facts. Missing: " + ", ".join(missing),
+                missing=missing,
+                partial=partial,
                 raw_text=content,
             )
-        except (KeyError, TypeError, ValueError) as exc:
-            raise LabelParseError(f"Vision API returned incomplete facts: {content}") from exc
+        return NutritionFacts(
+            product_name=partial["product_name"],
+            serving_size_g=parsed["serving_size_g"],
+            calories=parsed["calories"],
+            protein_g=parsed["protein_g"],
+            carbs_g=parsed["carbs_g"],
+            fat_g=parsed["fat_g"],
+            raw_text=content,
+        )
 
 
 class TesseractLabelReader:

@@ -174,6 +174,13 @@
     .saved-item .meta { color: var(--muted); font-size: 0.85rem; }
     .hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
     .status { color: var(--muted); font-size: 0.85rem; min-height: 1.2em; }
+    .missing-field {
+      outline: 1px solid var(--danger);
+      border-radius: 2px;
+      padding: 0.35rem;
+    }
+    .missing-field input { border-color: var(--danger); }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
@@ -241,6 +248,41 @@
       <button type="submit" id="submit">Scan, save &amp; log</button>
     </form>
 
+    <section class="panel" id="manual-panel" hidden style="margin-top:1rem">
+      <h2>Manual nutrition facts</h2>
+      <p class="hint" id="manual-message">
+        We couldn’t read some values from the label. Fill in the missing fields below.
+      </p>
+      <div class="row">
+        <label id="wrap-serving_size_g">
+          Serving size (g)
+          <input id="manual-serving_size_g" type="number" min="0.1" step="0.1" />
+        </label>
+        <label id="wrap-calories">
+          Calories (per serving)
+          <input id="manual-calories" type="number" min="0" step="0.1" />
+        </label>
+      </div>
+      <div class="row">
+        <label id="wrap-protein_g">
+          Protein (g)
+          <input id="manual-protein_g" type="number" min="0" step="0.1" />
+        </label>
+        <label id="wrap-carbs_g">
+          Carbs (g)
+          <input id="manual-carbs_g" type="number" min="0" step="0.1" />
+        </label>
+      </div>
+      <div class="row">
+        <label id="wrap-fat_g">
+          Fat (g)
+          <input id="manual-fat_g" type="number" min="0" step="0.1" />
+        </label>
+        <div></div>
+      </div>
+      <button type="button" id="manual-submit">Save manual facts &amp; log</button>
+    </section>
+
     <div id="out" hidden></div>
 
     <section class="saved-list" aria-live="polite">
@@ -263,10 +305,23 @@
     const out = document.getElementById("out");
     const submit = document.getElementById("submit");
     const savedLabelsEl = document.getElementById("saved-labels");
+    const manualPanel = document.getElementById("manual-panel");
+    const manualMessage = document.getElementById("manual-message");
+    const manualSubmit = document.getElementById("manual-submit");
     document.getElementById("day").valueAsDate = new Date();
 
     let mediaStream = null;
     let capturedBlob = null;
+    let pendingRawText = null;
+    let pendingProductName = null;
+
+    const MANUAL_FIELDS = [
+      ["serving_size_g", "serving size (g)"],
+      ["calories", "calories"],
+      ["protein_g", "protein"],
+      ["carbs_g", "carbohydrates"],
+      ["fat_g", "fat"],
+    ];
 
     function setStatus(message) {
       camStatus.textContent = message || "";
@@ -420,9 +475,62 @@
         .replaceAll('"', "&quot;");
     }
 
+    function hideManualPanel() {
+      manualPanel.hidden = true;
+      pendingRawText = null;
+      pendingProductName = null;
+      for (const [key] of MANUAL_FIELDS) {
+        const wrap = document.getElementById(`wrap-${key}`);
+        wrap.classList.remove("missing-field");
+        document.getElementById(`manual-${key}`).value = "";
+      }
+    }
+
+    function showManualPanel(detail) {
+      const missing = detail.missing || [];
+      const partial = detail.partial || {};
+      pendingRawText = detail.raw_text || null;
+      pendingProductName = partial.product_name || null;
+      manualMessage.textContent = detail.message
+        || "Could not read some nutrition facts. Enter the missing values below.";
+      for (const [key, label] of MANUAL_FIELDS) {
+        const input = document.getElementById(`manual-${key}`);
+        const wrap = document.getElementById(`wrap-${key}`);
+        if (partial[key] != null && partial[key] !== "") {
+          input.value = partial[key];
+        } else {
+          input.value = "";
+        }
+        wrap.classList.toggle("missing-field", missing.includes(label));
+      }
+      manualPanel.hidden = false;
+      manualPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function renderSuccess(payload) {
+      const m = payload.scaled_macros;
+      const c = payload.summary.consumed;
+      out.className = "result";
+      out.innerHTML = `
+        <strong>${escapeHtml(payload.label)}</strong>
+        <div>Saved label #${payload.saved_label.id} · source: ${escapeHtml(payload.source || "scan")} · OCR: ${escapeHtml(payload.facts.product_name)}</div>
+        <div>Label serving: ${payload.facts.serving_size_g}g · Logged: ${payload.grams}g (${payload.servings} servings)</div>
+        <div class="macros">
+          <div><strong>${m.calories}</strong><span>kcal added</span></div>
+          <div><strong>${m.protein_g}g</strong><span>protein</span></div>
+          <div><strong>${m.carbs_g}g</strong><span>carbs</span></div>
+          <div><strong>${m.fat_g}g</strong><span>fat</span></div>
+        </div>
+        <div style="margin-top:0.85rem;color:var(--muted)">
+          Day total: ${c.calories} kcal · P ${c.protein_g}g · C ${c.carbs_g}g · F ${c.fat_g}g
+        </div>`;
+      out.hidden = false;
+    }
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       out.hidden = true;
+      hideManualPanel();
       submit.disabled = true;
       submit.textContent = "Reading label…";
 
@@ -464,25 +572,17 @@
         const payload = await response.json();
         if (!response.ok) {
           const detail = payload.detail;
+          if (detail && typeof detail === "object" && detail.manual_entry_required) {
+            out.className = "error";
+            out.textContent = detail.message || "Could not read nutrition facts.";
+            out.hidden = false;
+            showManualPanel(detail);
+            return;
+          }
           throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
         }
-        const m = payload.scaled_macros;
-        const c = payload.summary.consumed;
-        out.className = "result";
-        out.innerHTML = `
-          <strong>${escapeHtml(payload.label)}</strong>
-          <div>Saved label #${payload.saved_label.id} · OCR: ${escapeHtml(payload.facts.product_name)}</div>
-          <div>Label serving: ${payload.facts.serving_size_g}g · Logged: ${payload.grams}g (${payload.servings} servings)</div>
-          <div class="macros">
-            <div><strong>${m.calories}</strong><span>kcal added</span></div>
-            <div><strong>${m.protein_g}g</strong><span>protein</span></div>
-            <div><strong>${m.carbs_g}g</strong><span>carbs</span></div>
-            <div><strong>${m.fat_g}g</strong><span>fat</span></div>
-          </div>
-          <div style="margin-top:0.85rem;color:var(--muted)">
-            Day total: ${c.calories} kcal · P ${c.protein_g}g · C ${c.carbs_g}g · F ${c.fat_g}g
-          </div>`;
-        out.hidden = false;
+        hideManualPanel();
+        renderSuccess(payload);
         await refreshSavedLabels();
       } catch (err) {
         out.className = "error";
@@ -491,6 +591,58 @@
       } finally {
         submit.disabled = false;
         submit.textContent = "Scan, save & log";
+      }
+    });
+
+    manualSubmit.addEventListener("click", async () => {
+      out.hidden = true;
+      manualSubmit.disabled = true;
+      manualSubmit.textContent = "Saving…";
+
+      const label = document.getElementById("label").value.trim();
+      const body = {
+        label,
+        grams: Number(document.getElementById("grams").value),
+        day: document.getElementById("day").value,
+        meal: document.getElementById("meal").value,
+        notes: document.getElementById("notes").value.trim() || null,
+        serving_size_g: Number(document.getElementById("manual-serving_size_g").value),
+        calories: Number(document.getElementById("manual-calories").value),
+        protein_g: Number(document.getElementById("manual-protein_g").value),
+        carbs_g: Number(document.getElementById("manual-carbs_g").value),
+        fat_g: Number(document.getElementById("manual-fat_g").value),
+        product_name: pendingProductName,
+        raw_text: pendingRawText,
+      };
+
+      try {
+        if (!label) throw new Error("Please enter a label name.");
+        for (const [key, labelName] of MANUAL_FIELDS) {
+          const value = body[key];
+          if (!Number.isFinite(value) || (key === "serving_size_g" ? value <= 0 : value < 0)) {
+            throw new Error(`Enter a valid value for ${labelName}.`);
+          }
+        }
+        const response = await fetch("/labels/manual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          const detail = payload.detail;
+          throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+        }
+        hideManualPanel();
+        renderSuccess(payload);
+        await refreshSavedLabels();
+      } catch (err) {
+        out.className = "error";
+        out.textContent = err.message || String(err);
+        out.hidden = false;
+      } finally {
+        manualSubmit.disabled = false;
+        manualSubmit.textContent = "Save manual facts & log";
       }
     });
 

@@ -55,6 +55,7 @@ pytest
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/labels/scan` | Webcam/photo + **label name** + grams → parse, **save**, scale, log |
+| `POST` | `/labels/manual` | Manual nutrition facts fallback when OCR misses fields |
 | `GET` | `/labels` | List saved scanned labels |
 | `PATCH` | `/labels/{id}` | Rename a saved label |
 | `POST` | `/foods` | Create a food with macros per serving |
