@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mymacro — scan label</title>
+  <style>
+    :root {
+      --bg: #0f1410;
+      --panel: #1a221c;
+      --ink: #e8f0e9;
+      --muted: #9aab9d;
+      --accent: #7dbe6a;
+      --accent-ink: #102012;
+      --danger: #e07070;
+      --border: #2c3a2f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #243528 0%, transparent 55%),
+        var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    main {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+    }
+    h1 {
+      font-family: "IBM Plex Serif", Georgia, serif;
+      font-weight: 600;
+      font-size: clamp(2rem, 5vw, 2.6rem);
+      margin: 0 0 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    .lede {
+      color: var(--muted);
+      margin: 0 0 1.75rem;
+      line-height: 1.45;
+    }
+    form {
+      display: grid;
+      gap: 1rem;
+      padding: 1.25rem;
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid var(--border);
+    }
+    label {
+      display: grid;
+      gap: 0.4rem;
+      font-size: 0.92rem;
+    }
+    input[type="number"],
+    input[type="date"],
+    input[type="text"],
+    select {
+      width: 100%;
+      padding: 0.7rem 0.8rem;
+      border: 1px solid var(--border);
+      background: #101612;
+      color: var(--ink);
+      font: inherit;
+    }
+    .preview {
+      aspect-ratio: 4 / 3;
+      border: 1px dashed var(--border);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: #101612;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    button {
+      border: 0;
+      background: var(--accent);
+      color: var(--accent-ink);
+      font: inherit;
+      font-weight: 600;
+      padding: 0.85rem 1rem;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+    .result, .error {
+      margin-top: 1.25rem;
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
+    .error { border-color: var(--danger); color: #ffd0d0; }
+    .macros {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .macros div {
+      padding: 0.65rem 0.4rem;
+      text-align: center;
+      background: #101612;
+      border: 1px solid var(--border);
+    }
+    .macros strong { display: block; font-size: 1.05rem; }
+    .macros span { color: var(--muted); font-size: 0.75rem; }
+    a.doc { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>mymacro</h1>
+    <p class="lede">
+      Photograph a nutrition label, enter how many grams you ate, and we’ll add the
+      scaled macros to your day.
+      <a class="doc" href="/docs">API docs</a>
+    </p>
+
+    <form id="scan-form">
+      <label>
+        Nutrition label photo
+        <input id="image" name="image" type="file" accept="image/*" capture="environment" required />
+      </label>
+      <div class="preview" id="preview">Label preview</div>
+      <div class="row">
+        <label>
+          Grams eaten
+          <input id="grams" name="grams" type="number" min="0.1" step="0.1" value="50" required />
+        </label>
+        <label>
+          Day
+          <input id="day" name="day" type="date" required />
+        </label>
+      </div>
+      <div class="row">
+        <label>
+          Meal
+          <select id="meal" name="meal">
+            <option value="breakfast">breakfast</option>
+            <option value="lunch">lunch</option>
+            <option value="dinner">dinner</option>
+            <option value="snack" selected>snack</option>
+          </select>
+        </label>
+        <label>
+          Notes (optional)
+          <input id="notes" name="notes" type="text" placeholder="e.g. post-workout" />
+        </label>
+      </div>
+      <button type="submit" id="submit">Scan &amp; add to today</button>
+    </form>
+
+    <div id="out" hidden></div>
+  </main>
+  <script>
+    const form = document.getElementById("scan-form");
+    const imageInput = document.getElementById("image");
+    const preview = document.getElementById("preview");
+    const out = document.getElementById("out");
+    const submit = document.getElementById("submit");
+    document.getElementById("day").valueAsDate = new Date();
+
+    imageInput.addEventListener("change", () => {
+      const file = imageInput.files?.[0];
+      if (!file) {
+        preview.textContent = "Label preview";
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      preview.innerHTML = `<img alt="Selected nutrition label" src="${url}" />`;
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      out.hidden = true;
+      submit.disabled = true;
+      submit.textContent = "Reading label…";
+
+      const data = new FormData();
+      data.append("image", imageInput.files[0]);
+      data.append("grams", document.getElementById("grams").value);
+      data.append("day", document.getElementById("day").value);
+      data.append("meal", document.getElementById("meal").value);
+      const notes = document.getElementById("notes").value.trim();
+      if (notes) data.append("notes", notes);
+
+      try {
+        const response = await fetch("/labels/scan", { method: "POST", body: data });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.detail || "Scan failed");
+        }
+        const m = payload.scaled_macros;
+        const c = payload.summary.consumed;
+        out.className = "result";
+        out.innerHTML = `
+          <strong>${payload.facts.product_name}</strong>
+          <div>Label serving: ${payload.facts.serving_size_g}g · You logged: ${payload.grams}g (${payload.servings} servings)</div>
+          <div class="macros">
+            <div><strong>${m.calories}</strong><span>kcal added</span></div>
+            <div><strong>${m.protein_g}g</strong><span>protein</span></div>
+            <div><strong>${m.carbs_g}g</strong><span>carbs</span></div>
+            <div><strong>${m.fat_g}g</strong><span>fat</span></div>
+          </div>
+          <div style="margin-top:0.85rem;color:var(--muted)">
+            Day total: ${c.calories} kcal · P ${c.protein_g}g · C ${c.carbs_g}g · F ${c.fat_g}g
+          </div>`;
+        out.hidden = false;
+      } catch (err) {
+        out.className = "error";
+        out.textContent = err.message || String(err);
+        out.hidden = false;
+      } finally {
+        submit.disabled = false;
+        submit.textContent = "Scan & add to today";
+      }
+    });
+  </script>
+</body>
+</html>

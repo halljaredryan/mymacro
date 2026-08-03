@@ -22,6 +22,10 @@ def get_food(db: Session, food_id: int) -> models.Food | None:
     return db.get(models.Food, food_id)
 
 
+def get_food_by_name(db: Session, name: str) -> models.Food | None:
+    return db.scalar(select(models.Food).where(models.Food.name == name))
+
+
 def upsert_daily_goal(db: Session, payload: schemas.DailyGoalCreate) -> models.DailyGoal:
     existing = db.scalar(select(models.DailyGoal).where(models.DailyGoal.day == payload.day))
     if existing:

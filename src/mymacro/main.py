@@ -1,17 +1,25 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import date
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from mymacro import crud, schemas, services
+from mymacro import crud, label_service, schemas, services
 from mymacro.config import settings
 from mymacro.database import get_db, init_db
+from mymacro.label_parse import LabelParseError
+from mymacro.label_reader import LabelReader, get_label_reader
 
 DbSession = Annotated[Session, Depends(get_db)]
+LabelReaderDep = Annotated[LabelReader, Depends(get_label_reader)]
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 @asynccontextmanager
@@ -21,6 +29,16 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title=settings.app_title, version="0.1.0", lifespan=lifespan)
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def ui() -> FileResponse:
+    index = STATIC_DIR / "index.html"
+    if not index.is_file():
+        raise HTTPException(status_code=404, detail="UI not found")
+    return FileResponse(index)
 
 
 @app.get("/health")
@@ -85,6 +103,52 @@ def delete_entry(entry_id: int, db: DbSession) -> None:
 @app.get("/days/{day}/summary", response_model=schemas.DaySummary)
 def day_summary(day: date, db: DbSession) -> schemas.DaySummary:
     return services.day_summary(db, day)
+
+
+@app.post(
+    "/labels/scan",
+    response_model=schemas.LabelScanResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def scan_label(
+    db: DbSession,
+    reader: LabelReaderDep,
+    image: Annotated[UploadFile, File(description="Photo of the nutrition facts label")],
+    grams: Annotated[float, Form(gt=0, description="How many grams you ate")],
+    day: Annotated[date | None, Form()] = None,
+    meal: Annotated[str, Form()] = "snack",
+    notes: Annotated[str | None, Form()] = None,
+) -> schemas.LabelScanResult:
+    """Read a nutrition label image, scale macros by grams eaten, and log intake."""
+    content_type = image.content_type or "image/jpeg"
+    if not content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Upload must be an image",
+        )
+    image_bytes = await image.read()
+    if not image_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty image upload")
+    if grams <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="grams must be > 0")
+
+    try:
+        return label_service.scan_and_log(
+            db,
+            reader,
+            image_bytes=image_bytes,
+            content_type=content_type,
+            grams=grams,
+            day=day or date.today(),
+            meal=meal,
+            notes=notes,
+        )
+    except LabelParseError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 def run() -> None:

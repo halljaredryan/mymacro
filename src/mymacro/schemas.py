@@ -70,3 +70,23 @@ class DaySummary(BaseModel):
     consumed: Macros
     remaining: Macros | None
     entries: list[FoodEntryRead]
+
+
+class NutritionFacts(BaseModel):
+    product_name: str = "Scanned food"
+    serving_size_g: float = Field(gt=0)
+    calories: float = Field(ge=0)
+    protein_g: float = Field(ge=0)
+    carbs_g: float = Field(ge=0)
+    fat_g: float = Field(ge=0)
+    raw_text: str | None = None
+
+
+class LabelScanResult(BaseModel):
+    facts: NutritionFacts
+    grams: float
+    servings: float
+    scaled_macros: Macros
+    food: FoodRead
+    entry: FoodEntryRead
+    summary: DaySummary
