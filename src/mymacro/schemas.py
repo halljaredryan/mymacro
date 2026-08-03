@@ -102,6 +102,15 @@ class SavedLabelUpdate(BaseModel):
     label: str = Field(min_length=1, max_length=200)
 
 
+class ReuseSavedLabel(BaseModel):
+    """Log a new intake amount using an existing saved label's nutrition facts."""
+
+    grams: float = Field(gt=0)
+    day: date | None = None
+    meal: str = Field(default="snack", max_length=50)
+    notes: str | None = None
+
+
 class ManualNutritionFacts(BaseModel):
     """User-supplied nutrition facts when OCR cannot read the label."""
 

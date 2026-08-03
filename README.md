@@ -56,7 +56,8 @@ pytest
 |--------|------|---------|
 | `POST` | `/labels/scan` | Webcam/photo + **label name** + grams → parse, **save**, scale, log |
 | `POST` | `/labels/manual` | Manual nutrition facts fallback when OCR misses fields |
-| `GET` | `/labels` | List saved scanned labels |
+| `POST` | `/labels/{id}/log` | Reuse a saved label with a new gram amount |
+| `GET` | `/labels` | List saved labels (`?q=` searches name / OCR name) |
 | `PATCH` | `/labels/{id}` | Rename a saved label |
 | `POST` | `/foods` | Create a food with macros per serving |
 | `GET` | `/foods` | List foods |
@@ -86,8 +87,13 @@ curl -s -X POST http://127.0.0.1:8000/labels/scan \
   -F "grams=50" \
   -F "meal=snack"
 
-# List saved labels
-curl -s http://127.0.0.1:8000/labels
+# Search saved labels
+curl -s 'http://127.0.0.1:8000/labels?q=peanut'
+
+# Reuse a saved label with a different gram amount
+curl -s -X POST http://127.0.0.1:8000/labels/1/log \
+  -H 'Content-Type: application/json' \
+  -d '{"grams":40,"day":"2026-08-04","meal":"snack"}'
 
 # Create a food manually
 curl -s -X POST http://127.0.0.1:8000/foods \

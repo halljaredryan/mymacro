@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from mymacro import models, schemas
@@ -110,10 +110,17 @@ def create_saved_label(
     return saved
 
 
-def list_saved_labels(db: Session) -> list[models.SavedLabel]:
-    return list(
-        db.scalars(select(models.SavedLabel).order_by(models.SavedLabel.created_at.desc())).all()
-    )
+def list_saved_labels(db: Session, q: str | None = None) -> list[models.SavedLabel]:
+    stmt = select(models.SavedLabel).order_by(models.SavedLabel.created_at.desc())
+    if q and q.strip():
+        term = f"%{q.strip().lower()}%"
+        stmt = stmt.where(
+            or_(
+                models.SavedLabel.label.ilike(term),
+                models.SavedLabel.ocr_product_name.ilike(term),
+            )
+        )
+    return list(db.scalars(stmt).all())
 
 
 def get_saved_label(db: Session, label_id: int) -> models.SavedLabel | None:

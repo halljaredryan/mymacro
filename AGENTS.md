@@ -9,7 +9,7 @@
 - Scan UI: `http://127.0.0.1:8000/` (live webcam via `getUserMedia`, or file upload)
 - API docs: `/docs`
 - Core scan endpoint: `POST /labels/scan` (multipart: `image`, **`label`**, `grams`, optional `day`/`meal`/`notes`)
-- Every scan persists a `SavedLabel` (`GET /labels`, rename via `PATCH /labels/{id}`)
+- Every scan persists a `SavedLabel` (`GET /labels?q=…`, rename via `PATCH /labels/{id}`, reuse via `POST /labels/{id}/log`)
 
 ### Run / lint / test
 

@@ -51,6 +51,18 @@ def get_or_create_food_from_facts(
         raise
 
 
+def _facts_from_saved(saved: models.SavedLabel) -> schemas.NutritionFacts:
+    return schemas.NutritionFacts(
+        product_name=saved.ocr_product_name or saved.label,
+        serving_size_g=saved.serving_size_g,
+        calories=saved.calories,
+        protein_g=saved.protein_g,
+        carbs_g=saved.carbs_g,
+        fat_g=saved.fat_g,
+        raw_text=saved.raw_text,
+    )
+
+
 def _log_facts(
     db: Session,
     *,
@@ -61,10 +73,16 @@ def _log_facts(
     meal: str,
     notes: str | None,
     source: str,
+    saved: models.SavedLabel | None = None,
 ) -> schemas.LabelScanResult:
     servings, scaled = scale_macros_for_grams(facts, grams)
     food = get_or_create_food_from_facts(db, facts, food_name=label_name)
-    saved = crud.create_saved_label(db, label=label_name, facts=facts, food_id=food.id)
+    if saved is None:
+        saved = crud.create_saved_label(db, label=label_name, facts=facts, food_id=food.id)
+    elif saved.food_id is None:
+        saved.food_id = food.id
+        db.commit()
+        db.refresh(saved)
     entry = crud.create_entry(
         db,
         schemas.FoodEntryCreate(
@@ -144,4 +162,26 @@ def manual_and_log(
         meal=payload.meal,
         notes=payload.notes,
         source="manual",
+    )
+
+
+def reuse_and_log(
+    db: Session,
+    label_id: int,
+    payload: schemas.ReuseSavedLabel,
+) -> schemas.LabelScanResult | None:
+    saved = crud.get_saved_label(db, label_id)
+    if not saved:
+        return None
+    facts = _facts_from_saved(saved)
+    return _log_facts(
+        db,
+        facts=facts,
+        label_name=saved.label,
+        grams=payload.grams,
+        day=payload.day or date.today(),
+        meal=payload.meal,
+        notes=payload.notes,
+        source="reuse",
+        saved=saved,
     )

@@ -134,6 +134,63 @@ def test_ui_has_webcam_controls(client):
     assert 'name="label"' in response.text or 'id="label"' in response.text
     assert "manual-panel" in response.text
     assert "/labels/manual" in response.text
+    assert "label-search" in response.text
+    assert "/labels/" in response.text and "/log" in response.text
+
+
+def test_search_saved_labels(client, fake_reader):
+    client.post(
+        "/labels/scan",
+        data={"grams": "32", "label": "Costco peanut butter"},
+        files={"image": ("label.png", _tiny_png(), "image/png")},
+    )
+    client.post(
+        "/labels/manual",
+        json={
+            "label": "Greek yogurt",
+            "serving_size_g": 170,
+            "calories": 100,
+            "protein_g": 17,
+            "carbs_g": 6,
+            "fat_g": 0,
+            "grams": 170,
+        },
+    )
+
+    peanut = client.get("/labels", params={"q": "peanut"})
+    assert peanut.status_code == 200
+    assert len(peanut.json()) == 1
+    assert peanut.json()[0]["label"] == "Costco peanut butter"
+
+    yogurt = client.get("/labels", params={"q": "yogurt"})
+    assert len(yogurt.json()) == 1
+    assert yogurt.json()[0]["label"] == "Greek yogurt"
+
+
+def test_reuse_saved_label_logs_new_grams(client, fake_reader):
+    created = client.post(
+        "/labels/scan",
+        data={"grams": "32", "label": "Costco peanut butter", "day": "2026-08-03"},
+        files={"image": ("label.png", _tiny_png(), "image/png")},
+    )
+    assert created.status_code == 201
+    label_id = created.json()["saved_label"]["id"]
+    labels_before = len(client.get("/labels").json())
+
+    reused = client.post(
+        f"/labels/{label_id}/log",
+        json={"grams": 16, "day": "2026-08-04", "meal": "snack"},
+    )
+    assert reused.status_code == 201, reused.text
+    body = reused.json()
+    assert body["source"] == "reuse"
+    assert body["grams"] == 16
+    assert body["servings"] == 0.5
+    assert body["scaled_macros"]["calories"] == 95.0
+    assert body["entry"]["day"] == "2026-08-04"
+    assert body["saved_label"]["id"] == label_id
+    # Reuse should not create another saved label row
+    assert len(client.get("/labels").json()) == labels_before
 
 
 def test_scan_parse_error_returns_manual_entry_payload(client):

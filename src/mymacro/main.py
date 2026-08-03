@@ -106,8 +106,8 @@ def day_summary(day: date, db: DbSession) -> schemas.DaySummary:
 
 
 @app.get("/labels", response_model=list[schemas.SavedLabelRead])
-def list_saved_labels(db: DbSession) -> list[schemas.SavedLabelRead]:
-    return [schemas.SavedLabelRead.model_validate(item) for item in crud.list_saved_labels(db)]
+def list_saved_labels(db: DbSession, q: str | None = None) -> list[schemas.SavedLabelRead]:
+    return [schemas.SavedLabelRead.model_validate(item) for item in crud.list_saved_labels(db, q=q)]
 
 
 @app.patch("/labels/{label_id}", response_model=schemas.SavedLabelRead)
@@ -118,6 +118,24 @@ def rename_saved_label(
     if not saved:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved label not found")
     return schemas.SavedLabelRead.model_validate(saved)
+
+
+@app.post(
+    "/labels/{label_id}/log",
+    response_model=schemas.LabelScanResult,
+    status_code=status.HTTP_201_CREATED,
+)
+def reuse_saved_label(
+    label_id: int, payload: schemas.ReuseSavedLabel, db: DbSession
+) -> schemas.LabelScanResult:
+    """Reuse a saved label's nutrition facts with a new gram amount."""
+    try:
+        result = label_service.reuse_and_log(db, label_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved label not found")
+    return result
 
 
 @app.post(

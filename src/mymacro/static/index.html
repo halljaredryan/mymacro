@@ -165,13 +165,40 @@
     }
     .saved-item {
       display: grid;
-      gap: 0.35rem;
+      gap: 0.45rem;
       padding: 0.85rem 0.95rem;
       border: 1px solid var(--border);
       background: var(--panel);
     }
     .saved-item strong { font-size: 1rem; }
     .saved-item .meta { color: var(--muted); font-size: 0.85rem; }
+    .saved-item .item-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+    }
+    .saved-item .item-actions button {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--border);
+      font: inherit;
+      font-weight: 600;
+      padding: 0.55rem 0.8rem;
+      cursor: pointer;
+    }
+    .saved-item .item-actions button.primary {
+      border: 0;
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+    .reuse-form {
+      display: grid;
+      gap: 0.65rem;
+      margin-top: 0.35rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid var(--border);
+    }
     .hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
     .status { color: var(--muted); font-size: 0.85rem; min-height: 1.2em; }
     .missing-field {
@@ -287,6 +314,11 @@
 
     <section class="saved-list" aria-live="polite">
       <h2>Saved labels</h2>
+      <label>
+        Search saved labels
+        <input id="label-search" type="search" placeholder="Search by name…" autocomplete="off" />
+      </label>
+      <p class="hint" id="search-status"></p>
       <div id="saved-labels"><p class="hint">No saved labels yet.</p></div>
     </section>
   </main>
@@ -305,6 +337,8 @@
     const out = document.getElementById("out");
     const submit = document.getElementById("submit");
     const savedLabelsEl = document.getElementById("saved-labels");
+    const labelSearch = document.getElementById("label-search");
+    const searchStatus = document.getElementById("search-status");
     const manualPanel = document.getElementById("manual-panel");
     const manualMessage = document.getElementById("manual-message");
     const manualSubmit = document.getElementById("manual-submit");
@@ -314,6 +348,9 @@
     let capturedBlob = null;
     let pendingRawText = null;
     let pendingProductName = null;
+    let allSavedLabels = [];
+    let activeReuseId = null;
+    let searchTimer = null;
 
     const MANUAL_FIELDS = [
       ["serving_size_g", "serving size (g)"],
@@ -437,17 +474,24 @@
       setStatus("Using uploaded photo.");
     });
 
-    async function refreshSavedLabels() {
-      try {
-        const response = await fetch("/labels");
-        const items = await response.json();
-        if (!response.ok) throw new Error("Failed to load saved labels");
-        if (!items.length) {
-          savedLabelsEl.innerHTML = `<p class="hint">No saved labels yet.</p>`;
-          return;
-        }
-        savedLabelsEl.innerHTML = items.map((item) => `
-          <article class="saved-item">
+    function todayValue() {
+      return document.getElementById("day").value || new Date().toISOString().slice(0, 10);
+    }
+
+    function renderSavedLabels(items, query = "") {
+      allSavedLabels = items;
+      if (!items.length) {
+        savedLabelsEl.innerHTML = `<p class="hint">${
+          query ? "No saved labels match that search." : "No saved labels yet."
+        }</p>`;
+        searchStatus.textContent = query ? "0 matches" : "";
+        return;
+      }
+      searchStatus.textContent = query ? `${items.length} match${items.length === 1 ? "" : "es"}` : `${items.length} saved`;
+      savedLabelsEl.innerHTML = items.map((item) => {
+        const open = activeReuseId === item.id;
+        return `
+          <article class="saved-item" data-id="${item.id}">
             <strong>${escapeHtml(item.label)}</strong>
             <div class="meta">
               Serving ${item.serving_size_g}g ·
@@ -460,12 +504,112 @@
               OCR name: ${escapeHtml(item.ocr_product_name || "—")} ·
               saved ${new Date(item.created_at).toLocaleString()}
             </div>
+            <div class="item-actions">
+              <button type="button" class="primary reuse-toggle" data-id="${item.id}">
+                ${open ? "Cancel" : "Reuse · log grams"}
+              </button>
+            </div>
+            <div class="reuse-form" data-reuse-form="${item.id}" ${open ? "" : "hidden"}>
+              <div class="row">
+                <label>
+                  Grams eaten
+                  <input class="reuse-grams" type="number" min="0.1" step="0.1" value="${item.serving_size_g}" />
+                </label>
+                <label>
+                  Day
+                  <input class="reuse-day" type="date" value="${todayValue()}" />
+                </label>
+              </div>
+              <div class="row">
+                <label>
+                  Meal
+                  <select class="reuse-meal">
+                    <option value="breakfast">breakfast</option>
+                    <option value="lunch">lunch</option>
+                    <option value="dinner">dinner</option>
+                    <option value="snack" selected>snack</option>
+                  </select>
+                </label>
+                <label>
+                  Notes (optional)
+                  <input class="reuse-notes" type="text" placeholder="optional" />
+                </label>
+              </div>
+              <button type="button" class="primary reuse-submit" data-id="${item.id}">
+                Log this amount
+              </button>
+            </div>
           </article>
-        `).join("");
+        `;
+      }).join("");
+    }
+
+    async function refreshSavedLabels(query = labelSearch.value.trim()) {
+      try {
+        const url = query ? `/labels?q=${encodeURIComponent(query)}` : "/labels";
+        const response = await fetch(url);
+        const items = await response.json();
+        if (!response.ok) throw new Error("Failed to load saved labels");
+        renderSavedLabels(items, query);
       } catch (err) {
         savedLabelsEl.innerHTML = `<p class="error">${escapeHtml(err.message || String(err))}</p>`;
       }
     }
+
+    labelSearch.addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => refreshSavedLabels(labelSearch.value.trim()), 200);
+    });
+
+    savedLabelsEl.addEventListener("click", async (event) => {
+      const toggle = event.target.closest(".reuse-toggle");
+      if (toggle) {
+        const id = Number(toggle.dataset.id);
+        activeReuseId = activeReuseId === id ? null : id;
+        renderSavedLabels(allSavedLabels, labelSearch.value.trim());
+        return;
+      }
+
+      const submitBtn = event.target.closest(".reuse-submit");
+      if (!submitBtn) return;
+
+      const id = Number(submitBtn.dataset.id);
+      const card = submitBtn.closest(".saved-item");
+      const grams = Number(card.querySelector(".reuse-grams").value);
+      const day = card.querySelector(".reuse-day").value;
+      const meal = card.querySelector(".reuse-meal").value;
+      const notes = card.querySelector(".reuse-notes").value.trim() || null;
+
+      out.hidden = true;
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Logging…";
+      try {
+        if (!Number.isFinite(grams) || grams <= 0) {
+          throw new Error("Enter a valid grams amount.");
+        }
+        const response = await fetch(`/labels/${id}/log`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ grams, day, meal, notes }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          const detail = payload.detail;
+          throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+        }
+        activeReuseId = null;
+        renderSuccess(payload);
+        out.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        await refreshSavedLabels(labelSearch.value.trim());
+      } catch (err) {
+        out.className = "error";
+        out.textContent = err.message || String(err);
+        out.hidden = false;
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Log this amount";
+      }
+    });
 
     function escapeHtml(value) {
       return String(value)
