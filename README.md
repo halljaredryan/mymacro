@@ -31,6 +31,7 @@ uvicorn mymacro.main:app --reload --host 0.0.0.0 --port 8000
 - Daily logs: http://127.0.0.1:8000/logs
 - Micronutrients % DV: http://127.0.0.1:8000/micros
 - Settings (ideal macro targets): http://127.0.0.1:8000/settings
+- Barcode lookup (FatSecret): http://127.0.0.1:8000/barcode
 - Interactive docs: http://127.0.0.1:8000/docs
 - Health: http://127.0.0.1:8000/health
 
@@ -43,6 +44,8 @@ Optional env vars (prefix `MYMACRO_`):
 | `MYMACRO_OPENAI_API_KEY` | _(unset)_ | Enables vision-model label reading (also accepts `OPENAI_API_KEY`) |
 | `MYMACRO_OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API base |
 | `MYMACRO_OPENAI_VISION_MODEL` | `gpt-4o-mini` | Vision chat model |
+| `MYMACRO_FATSECRET_CLIENT_ID` | _(unset)_ | FatSecret API Client ID for barcode lookup |
+| `MYMACRO_FATSECRET_CLIENT_SECRET` | _(unset)_ | FatSecret API Client Secret for barcode lookup |
 
 When an OpenAI key is set, label photos are read with the vision model first; otherwise Tesseract OCR + text parsing is used.
 
@@ -58,6 +61,7 @@ pytest
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/labels/scan` | Webcam/photo + **label name** + grams → parse, **save**, scale, log |
+| `POST` | `/barcode/lookup` | Lookup barcode in FatSecret, scale by grams, save & log |
 | `POST` | `/labels/manual` | Manual nutrition facts fallback when OCR misses fields |
 | `POST` | `/labels/{id}/log` | Reuse a saved label with a new gram amount |
 | `GET` | `/labels` | List saved labels (`?q=` searches name / OCR name) |
