@@ -136,6 +136,7 @@ def test_ui_has_webcam_controls(client):
     assert "/labels/manual" in response.text
     assert "label-search" in response.text
     assert "/labels/" in response.text and "/log" in response.text
+    assert "Daily micronutrients" in response.text
 
 
 def test_search_saved_labels(client, fake_reader):

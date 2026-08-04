@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from mymacro.micronutrients import MICRO_SPECS, normalize_micronutrients
 from mymacro.schemas import NutritionFacts
 
 _SERVING_PATTERNS = [
@@ -103,8 +104,24 @@ def _product_name(text: str) -> str | None:
     return None
 
 
+def _parse_micronutrients(text: str) -> dict[str, float]:
+    found: dict[str, float] = {}
+    for spec in MICRO_SPECS:
+        unit = re.escape(spec.unit)
+        for alias in spec.aliases:
+            pattern = re.compile(
+                rf"{re.escape(alias)}\s*[^\d]{{0,16}}(\d+(?:\.\d+)?)\s*(?:{unit})?\b",
+                re.IGNORECASE,
+            )
+            value = _first_float(pattern, text)
+            if value is not None:
+                found[spec.key] = value
+                break
+    return normalize_micronutrients(found)
+
+
 def parse_nutrition_text(text: str, default_name: str = "Scanned food") -> NutritionFacts:
-    """Extract serving size and macros from raw nutrition-label text."""
+    """Extract serving size, macros, and optional micronutrients from label text."""
     cleaned = text.replace("\u00a0", " ")
     values: dict[str, float | None] = {
         "serving_size_g": _serving_size_g(cleaned),
@@ -114,10 +131,12 @@ def parse_nutrition_text(text: str, default_name: str = "Scanned food") -> Nutri
         "fat_g": _first_float(_FAT, cleaned),
     }
     product_name = _product_name(cleaned) or default_name
+    micros = _parse_micronutrients(cleaned)
     missing_labels = [label for key, label in FIELD_KEYS if values[key] is None]
     partial = {
         "product_name": product_name,
         **{key: values[key] for key, _ in FIELD_KEYS if values[key] is not None},
+        "micronutrients": micros,
     }
 
     if missing_labels:
@@ -135,6 +154,7 @@ def parse_nutrition_text(text: str, default_name: str = "Scanned food") -> Nutri
         protein_g=float(values["protein_g"]),  # type: ignore[arg-type]
         carbs_g=float(values["carbs_g"]),  # type: ignore[arg-type]
         fat_g=float(values["fat_g"]),  # type: ignore[arg-type]
+        micronutrients=micros,
         raw_text=cleaned.strip(),
     )
 

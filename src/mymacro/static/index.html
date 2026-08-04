@@ -208,6 +208,35 @@
     }
     .missing-field input { border-color: var(--danger); }
     [hidden] { display: none !important; }
+    .micro-list { display: grid; gap: 0.65rem; }
+    .micro-row {
+      display: grid;
+      gap: 0.25rem;
+    }
+    .micro-row header {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      font-size: 0.9rem;
+    }
+    .micro-row .bar {
+      height: 0.55rem;
+      background: #101612;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .micro-row .fill {
+      height: 100%;
+      background: var(--accent);
+    }
+    .micro-row .fill.over { background: #d4a24c; }
+    .micro-optional {
+      display: grid;
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+    }
   </style>
 </head>
 <body>
@@ -307,10 +336,43 @@
         </label>
         <div></div>
       </div>
+      <div class="micro-optional">
+        <p class="hint">Optional micronutrients (per label serving)</p>
+        <div class="row">
+          <label>Sodium (mg)<input id="manual-sodium_mg" type="number" min="0" step="1" /></label>
+          <label>Fiber (g)<input id="manual-fiber_g" type="number" min="0" step="0.1" /></label>
+        </div>
+        <div class="row">
+          <label>Potassium (mg)<input id="manual-potassium_mg" type="number" min="0" step="1" /></label>
+          <label>Calcium (mg)<input id="manual-calcium_mg" type="number" min="0" step="1" /></label>
+        </div>
+        <div class="row">
+          <label>Iron (mg)<input id="manual-iron_mg" type="number" min="0" step="0.1" /></label>
+          <label>Vitamin D (mcg)<input id="manual-vitamin_d_mcg" type="number" min="0" step="0.1" /></label>
+        </div>
+        <div class="row">
+          <label>Added sugars (g)<input id="manual-added_sugars_g" type="number" min="0" step="0.1" /></label>
+          <label>Cholesterol (mg)<input id="manual-cholesterol_mg" type="number" min="0" step="1" /></label>
+        </div>
+      </div>
       <button type="button" id="manual-submit">Save manual facts &amp; log</button>
     </section>
 
     <div id="out" hidden></div>
+
+    <section class="panel" id="micros-panel" style="margin-top:1.25rem">
+      <h2>Daily micronutrients (% DV)</h2>
+      <p class="hint">
+        Tracks micronutrients from saved/logged labels and shows percent of FDA Daily Value for the selected day.
+      </p>
+      <label>
+        Day
+        <input id="micros-day" type="date" />
+      </label>
+      <div class="micro-list" id="micros-list">
+        <p class="hint">Log a food with micronutrients to see daily % DV here.</p>
+      </div>
+    </section>
 
     <section class="saved-list" aria-live="polite">
       <h2>Saved labels</h2>
@@ -342,7 +404,21 @@
     const manualPanel = document.getElementById("manual-panel");
     const manualMessage = document.getElementById("manual-message");
     const manualSubmit = document.getElementById("manual-submit");
+    const microsDay = document.getElementById("micros-day");
+    const microsList = document.getElementById("micros-list");
     document.getElementById("day").valueAsDate = new Date();
+    microsDay.valueAsDate = new Date();
+
+    const MANUAL_MICRO_FIELDS = [
+      "sodium_mg",
+      "fiber_g",
+      "potassium_mg",
+      "calcium_mg",
+      "iron_mg",
+      "vitamin_d_mcg",
+      "added_sugars_g",
+      "cholesterol_mg",
+    ];
 
     let mediaStream = null;
     let capturedBlob = null;
@@ -504,6 +580,7 @@
               OCR name: ${escapeHtml(item.ocr_product_name || "—")} ·
               saved ${new Date(item.created_at).toLocaleString()}
             </div>
+            <div class="meta">${escapeHtml(formatMicros(item.micronutrients))}</div>
             <div class="item-actions">
               <button type="button" class="primary reuse-toggle" data-id="${item.id}">
                 ${open ? "Cancel" : "Reuse · log grams"}
@@ -601,6 +678,7 @@
         renderSuccess(payload);
         out.scrollIntoView({ behavior: "smooth", block: "nearest" });
         await refreshSavedLabels(labelSearch.value.trim());
+        await refreshMicronutrients(microsDay.value);
       } catch (err) {
         out.className = "error";
         out.textContent = err.message || String(err);
@@ -651,6 +729,60 @@
       manualPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
+    function formatMicros(map) {
+      const entries = Object.entries(map || {});
+      if (!entries.length) return "No micronutrients on this label";
+      return entries.map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · ");
+    }
+
+    function renderMicroSummary(rows) {
+      const withData = (rows || []).filter((row) => row.consumed > 0 || row.rdv != null);
+      if (!withData.length) {
+        microsList.innerHTML = `<p class="hint">No micronutrient intake logged for this day yet.</p>`;
+        return;
+      }
+      microsList.innerHTML = withData.map((row) => {
+        const pct = row.percent_dv;
+        const width = pct == null ? 0 : Math.min(pct, 100);
+        const over = pct != null && pct > 100;
+        const right = pct == null
+          ? `${row.consumed}${row.unit} (no DV)`
+          : `${row.consumed}${row.unit} · ${pct}% DV` + (row.rdv != null ? ` of ${row.rdv}${row.unit}` : "");
+        return `
+          <div class="micro-row">
+            <header>
+              <span>${escapeHtml(row.label)}</span>
+              <span>${escapeHtml(right)}</span>
+            </header>
+            <div class="bar"><div class="fill ${over ? "over" : ""}" style="width:${width}%"></div></div>
+          </div>`;
+      }).join("");
+    }
+
+    async function refreshMicronutrients(day = microsDay.value || todayValue()) {
+      try {
+        const response = await fetch(`/days/${day}/summary`);
+        const payload = await response.json();
+        if (!response.ok) throw new Error("Failed to load day summary");
+        renderMicroSummary(payload.micronutrients || []);
+      } catch (err) {
+        microsList.innerHTML = `<p class="error">${escapeHtml(err.message || String(err))}</p>`;
+      }
+    }
+
+    microsDay.addEventListener("change", () => refreshMicronutrients(microsDay.value));
+
+    function collectManualMicros() {
+      const micros = {};
+      for (const key of MANUAL_MICRO_FIELDS) {
+        const raw = document.getElementById(`manual-${key}`).value;
+        if (raw === "" || raw == null) continue;
+        const value = Number(raw);
+        if (Number.isFinite(value) && value >= 0) micros[key] = value;
+      }
+      return micros;
+    }
+
     function renderSuccess(payload) {
       const m = payload.scaled_macros;
       const c = payload.summary.consumed;
@@ -667,8 +799,15 @@
         </div>
         <div style="margin-top:0.85rem;color:var(--muted)">
           Day total: ${c.calories} kcal · P ${c.protein_g}g · C ${c.carbs_g}g · F ${c.fat_g}g
+        </div>
+        <div style="margin-top:0.55rem;color:var(--muted)">
+          Micros added: ${escapeHtml(formatMicros(payload.scaled_micronutrients))}
         </div>`;
       out.hidden = false;
+      if (payload.summary?.day) {
+        microsDay.value = payload.summary.day;
+      }
+      renderMicroSummary(payload.summary?.micronutrients || []);
     }
 
     form.addEventListener("submit", async (event) => {
@@ -728,6 +867,7 @@
         hideManualPanel();
         renderSuccess(payload);
         await refreshSavedLabels();
+        await refreshMicronutrients(microsDay.value);
       } catch (err) {
         out.className = "error";
         out.textContent = err.message || String(err);
@@ -757,6 +897,7 @@
         fat_g: Number(document.getElementById("manual-fat_g").value),
         product_name: pendingProductName,
         raw_text: pendingRawText,
+        micronutrients: collectManualMicros(),
       };
 
       try {
@@ -780,6 +921,7 @@
         hideManualPanel();
         renderSuccess(payload);
         await refreshSavedLabels();
+        await refreshMicronutrients(microsDay.value);
       } catch (err) {
         out.className = "error";
         out.textContent = err.message || String(err);
@@ -791,6 +933,7 @@
     });
 
     refreshSavedLabels();
+    refreshMicronutrients();
     window.addEventListener("beforeunload", stopWebcam);
   </script>
 </body>

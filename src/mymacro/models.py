@@ -1,6 +1,8 @@
 from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import (
+    JSON,
     Date,
     DateTime,
     Float,
@@ -17,7 +19,7 @@ from mymacro.database import Base
 
 
 class Food(Base):
-    """A reusable food item with macros per serving."""
+    """A reusable food item with macros (and optional micros) per serving."""
 
     __tablename__ = "foods"
 
@@ -28,6 +30,7 @@ class Food(Base):
     protein_g: Mapped[float] = mapped_column(Float, default=0.0)
     carbs_g: Mapped[float] = mapped_column(Float, default=0.0)
     fat_g: Mapped[float] = mapped_column(Float, default=0.0)
+    micronutrients_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     entries: Mapped[list["FoodEntry"]] = relationship(back_populates="food")
@@ -77,6 +80,7 @@ class SavedLabel(Base):
     protein_g: Mapped[float] = mapped_column(Float)
     carbs_g: Mapped[float] = mapped_column(Float)
     fat_g: Mapped[float] = mapped_column(Float)
+    micronutrients_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     ocr_product_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     food_id: Mapped[int | None] = mapped_column(ForeignKey("foods.id"), nullable=True, index=True)

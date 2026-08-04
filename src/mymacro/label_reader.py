@@ -11,6 +11,7 @@ import httpx
 
 from mymacro.config import settings
 from mymacro.label_parse import LabelParseError, parse_nutrition_text
+from mymacro.micronutrients import normalize_micronutrients
 from mymacro.schemas import NutritionFacts
 
 logger = logging.getLogger(__name__)
@@ -24,9 +25,24 @@ Return ONLY valid JSON with these keys:
   "calories": number,
   "protein_g": number,
   "carbs_g": number,
-  "fat_g": number
+  "fat_g": number,
+  "micronutrients": {
+    "saturated_fat_g": number|null,
+    "cholesterol_mg": number|null,
+    "sodium_mg": number|null,
+    "fiber_g": number|null,
+    "total_sugars_g": number|null,
+    "added_sugars_g": number|null,
+    "vitamin_d_mcg": number|null,
+    "calcium_mg": number|null,
+    "iron_mg": number|null,
+    "potassium_mg": number|null,
+    "vitamin_c_mg": number|null,
+    "vitamin_a_mcg": number|null
+  }
 }
 Use the labeled serving size in grams. If the label is per 100g, set serving_size_g to 100.
+Omit micronutrient keys that are not present on the label.
 """.strip()
 
 
@@ -102,6 +118,8 @@ class OpenAIVisionLabelReader:
                 partial[key] = parsed[key]
             except (TypeError, ValueError):
                 missing.append(label)
+        micros = normalize_micronutrients(data.get("micronutrients") or {})
+        partial["micronutrients"] = micros
         if missing:
             raise LabelParseError(
                 "Could not read nutrition facts. Missing: " + ", ".join(missing),
@@ -116,6 +134,7 @@ class OpenAIVisionLabelReader:
             protein_g=parsed["protein_g"],
             carbs_g=parsed["carbs_g"],
             fat_g=parsed["fat_g"],
+            micronutrients=micros,
             raw_text=content,
         )
 

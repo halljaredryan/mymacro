@@ -2,7 +2,7 @@
 
 Nutrition macro tracking API built with FastAPI, SQLAlchemy, and SQLite.
 
-Track foods, set daily macro goals, log what you eat, and see remaining calories / protein / carbs / fat for the day. Photograph a nutrition label, enter grams eaten, and the app scales the label macros into your daily intake.
+Track foods, set daily macro goals, log what you eat, and see remaining calories / protein / carbs / fat for the day. Photograph a nutrition label, enter grams eaten, and the app scales the label macros **and micronutrients** into your daily intake, with FDA Daily Value percentages.
 
 ## Requirements
 
@@ -63,7 +63,8 @@ pytest
 | `GET` | `/foods` | List foods |
 | `PUT` | `/goals` | Set / update daily macro goals |
 | `POST` | `/entries` | Log a food entry for a day |
-| `GET` | `/days/{day}/summary` | Consumed vs remaining macros |
+| `GET` | `/days/{day}/summary` | Consumed macros + micronutrient % DV for the day |
+| `GET` | `/micronutrients/daily-values` | FDA Daily Value reference table |
 | `DELETE` | `/entries/{id}` | Remove a logged entry |
 
 ### Label scan math

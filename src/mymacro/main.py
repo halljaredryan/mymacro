@@ -15,6 +15,7 @@ from mymacro.config import settings
 from mymacro.database import get_db, init_db
 from mymacro.label_parse import LabelParseError
 from mymacro.label_reader import LabelReader, get_label_reader
+from mymacro.micronutrients import MICRO_SPECS
 
 DbSession = Annotated[Session, Depends(get_db)]
 LabelReaderDep = Annotated[LabelReader, Depends(get_label_reader)]
@@ -56,12 +57,12 @@ def create_food(payload: schemas.FoodCreate, db: DbSession) -> schemas.FoodRead:
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Food already exists: {payload.name}",
         ) from exc
-    return schemas.FoodRead.model_validate(food)
+    return services.food_to_read(food)
 
 
 @app.get("/foods", response_model=list[schemas.FoodRead])
 def list_foods(db: DbSession) -> list[schemas.FoodRead]:
-    return [schemas.FoodRead.model_validate(food) for food in crud.list_foods(db)]
+    return [services.food_to_read(food) for food in crud.list_foods(db)]
 
 
 @app.get("/foods/{food_id}", response_model=schemas.FoodRead)
@@ -69,7 +70,22 @@ def get_food(food_id: int, db: DbSession) -> schemas.FoodRead:
     food = crud.get_food(db, food_id)
     if not food:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Food not found")
-    return schemas.FoodRead.model_validate(food)
+    return services.food_to_read(food)
+
+
+@app.get("/micronutrients/daily-values", response_model=schemas.DailyValuesInfo)
+def daily_values() -> schemas.DailyValuesInfo:
+    return schemas.DailyValuesInfo(
+        nutrients=[
+            {
+                "key": spec.key,
+                "label": spec.label,
+                "unit": spec.unit,
+                "rdv": spec.rdv,
+            }
+            for spec in MICRO_SPECS
+        ]
+    )
 
 
 @app.put("/goals", response_model=schemas.DailyGoalRead)
@@ -107,7 +123,7 @@ def day_summary(day: date, db: DbSession) -> schemas.DaySummary:
 
 @app.get("/labels", response_model=list[schemas.SavedLabelRead])
 def list_saved_labels(db: DbSession, q: str | None = None) -> list[schemas.SavedLabelRead]:
-    return [schemas.SavedLabelRead.model_validate(item) for item in crud.list_saved_labels(db, q=q)]
+    return [services.saved_label_to_read(item) for item in crud.list_saved_labels(db, q=q)]
 
 
 @app.patch("/labels/{label_id}", response_model=schemas.SavedLabelRead)
@@ -117,7 +133,7 @@ def rename_saved_label(
     saved = crud.update_saved_label(db, label_id, payload)
     if not saved:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved label not found")
-    return schemas.SavedLabelRead.model_validate(saved)
+    return services.saved_label_to_read(saved)
 
 
 @app.post(

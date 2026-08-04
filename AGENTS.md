@@ -26,6 +26,7 @@ Standard commands are in `README.md` and `pyproject.toml`. After `pip install -e
 - Scaling math: `servings = grams_eaten / label_serving_size_g`, then multiply label macros by servings.
 - `label` is required on scan — user-facing name stored on `saved_labels` (OCR product name kept separately as `ocr_product_name`).
 - If OCR cannot read fields, `POST /labels/scan` returns HTTP 422 with `detail.manual_entry_required`, `missing`, and `partial`; the UI shows manual inputs and submits `POST /labels/manual`.
+- Micronutrients (sodium, fiber, vitamins/minerals, etc.) are stored per food/saved label, scaled by grams, and exposed on `GET /days/{day}/summary` as `% DV` against FDA Daily Values (`src/mymacro/micronutrients.py`).
 - Webcam needs a secure context (localhost/https) and browser permission; file upload remains as fallback.
 - Tests mock the label reader except `test_tesseract_reader_on_synthetic_label`, which skips if Tesseract is absent.
 

@@ -4,10 +4,13 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from mymacro import models, schemas
+from mymacro.micronutrients import normalize_micronutrients
 
 
 def create_food(db: Session, payload: schemas.FoodCreate) -> models.Food:
-    food = models.Food(**payload.model_dump())
+    data = payload.model_dump()
+    micros = normalize_micronutrients(data.pop("micronutrients", {}))
+    food = models.Food(**data, micronutrients_json=micros or None)
     db.add(food)
     db.commit()
     db.refresh(food)
@@ -93,6 +96,7 @@ def create_saved_label(
     facts: schemas.NutritionFacts,
     food_id: int | None,
 ) -> models.SavedLabel:
+    micros = normalize_micronutrients(facts.micronutrients)
     saved = models.SavedLabel(
         label=label.strip()[:200],
         serving_size_g=facts.serving_size_g,
@@ -100,6 +104,7 @@ def create_saved_label(
         protein_g=facts.protein_g,
         carbs_g=facts.carbs_g,
         fat_g=facts.fat_g,
+        micronutrients_json=micros or None,
         ocr_product_name=facts.product_name,
         raw_text=facts.raw_text,
         food_id=food_id,
