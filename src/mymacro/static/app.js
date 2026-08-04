@@ -20,6 +20,7 @@ window.MyMacro = {
       ["/logs", "Daily logs", "logs"],
       ["/micros", "Micronutrients", "micros"],
       ["/settings", "Settings", "settings"],
+      ["/barcode", "Barcode", "barcode"],
     ];
     const links = items
       .map(([href, label, key]) => {

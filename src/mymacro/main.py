@@ -13,12 +13,14 @@ from sqlalchemy.orm import Session
 from mymacro import crud, label_service, schemas, services
 from mymacro.config import settings
 from mymacro.database import get_db, init_db
+from mymacro.fatsecret import FatSecretClient, FatSecretError, get_fatsecret_client
 from mymacro.label_parse import LabelParseError
 from mymacro.label_reader import LabelReader, get_label_reader
 from mymacro.micronutrients import MICRO_SPECS
 
 DbSession = Annotated[Session, Depends(get_db)]
 LabelReaderDep = Annotated[LabelReader, Depends(get_label_reader)]
+FatSecretDep = Annotated[FatSecretClient, Depends(get_fatsecret_client)]
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -59,6 +61,11 @@ def micros_page() -> FileResponse:
 @app.get("/settings", include_in_schema=False)
 def settings_page() -> FileResponse:
     return _page("settings.html")
+
+
+@app.get("/barcode", include_in_schema=False)
+def barcode_page() -> FileResponse:
+    return _page("barcode.html")
 
 
 @app.get("/health")
@@ -172,6 +179,38 @@ def list_days(db: DbSession) -> list[schemas.DayListItem]:
 @app.get("/days/{day}/summary", response_model=schemas.DaySummary)
 def day_summary(day: date, db: DbSession) -> schemas.DaySummary:
     return services.day_summary(db, day)
+
+
+@app.post(
+    "/barcode/lookup",
+    response_model=schemas.BarcodeLookupResult,
+    status_code=status.HTTP_201_CREATED,
+)
+def barcode_lookup_and_log(
+    payload: schemas.BarcodeLookupRequest,
+    db: DbSession,
+    fatsecret: FatSecretDep,
+) -> schemas.BarcodeLookupResult:
+    barcode = payload.barcode.strip()
+    if not barcode:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="barcode is required")
+    try:
+        facts = fatsecret.nutrition_for_barcode(barcode)
+    except FatSecretError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    label = (payload.label or facts.product_name or f"Barcode {barcode}").strip()
+    result = label_service.log_nutrition_facts(
+        db,
+        facts=facts,
+        label=label,
+        grams=payload.grams,
+        day=payload.day or date.today(),
+        meal=payload.meal,
+        notes=payload.notes,
+        source="barcode",
+    )
+    return schemas.BarcodeLookupResult(barcode=barcode, **result.model_dump())
 
 
 @app.get("/labels", response_model=list[schemas.SavedLabelRead])

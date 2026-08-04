@@ -127,6 +127,32 @@ def _log_facts(
     )
 
 
+def log_nutrition_facts(
+    db: Session,
+    *,
+    facts: schemas.NutritionFacts,
+    grams: float,
+    day: date,
+    label: str,
+    meal: str = "snack",
+    notes: str | None = None,
+    source: str = "manual",
+) -> schemas.LabelScanResult:
+    label_name = label.strip()
+    if not label_name:
+        raise ValueError("label is required")
+    return _log_facts(
+        db,
+        facts=facts,
+        label_name=label_name,
+        grams=grams,
+        day=day,
+        meal=meal,
+        notes=notes,
+        source=source,
+    )
+
+
 def scan_and_log(
     db: Session,
     reader: LabelReader,
@@ -144,10 +170,10 @@ def scan_and_log(
         raise ValueError("label is required")
 
     facts = reader.read(image_bytes, content_type=content_type)
-    return _log_facts(
+    return log_nutrition_facts(
         db,
         facts=facts,
-        label_name=label_name,
+        label=label_name,
         grams=grams,
         day=day,
         meal=meal,
@@ -174,10 +200,10 @@ def manual_and_log(
         micronutrients=payload.micronutrients,
         raw_text=payload.raw_text,
     )
-    return _log_facts(
+    return log_nutrition_facts(
         db,
         facts=facts,
-        label_name=label_name,
+        label=label_name,
         grams=payload.grams,
         day=payload.day or date.today(),
         meal=payload.meal,

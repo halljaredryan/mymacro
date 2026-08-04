@@ -190,5 +190,19 @@ class LabelScanResult(BaseModel):
     source: str = "scan"
 
 
+class BarcodeLookupRequest(BaseModel):
+    barcode: str = Field(min_length=4, max_length=64)
+    grams: float = Field(gt=0)
+    label: str | None = Field(default=None, max_length=200)
+    day: date | None = None
+    meal: str = Field(default="snack", max_length=50)
+    notes: str | None = None
+
+
+class BarcodeLookupResult(LabelScanResult):
+    barcode: str
+    source: str = "barcode"
+
+
 class DailyValuesInfo(BaseModel):
     nutrients: list[dict[str, Any]]
