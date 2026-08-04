@@ -6,7 +6,7 @@
 
 **mymacro** is a FastAPI nutrition macro-tracking app (SQLite by default).
 
-- Pages: `/` scan, `/logs` daily food log, `/micros` micronutrient % DV, `/settings` ideal macro targets
+- Pages: `/` scan, `/barcode` FatSecret barcode lookup, `/logs` daily food log, `/micros` micronutrient % DV, `/settings` ideal macro targets
 - API docs: `/docs`
 - Core scan endpoint: `POST /labels/scan` (multipart: `image`, **`label`**, `grams`, optional `day`/`meal`/`notes`)
 - Every scan persists a `SavedLabel` (`GET /labels?q=…`, rename via `PATCH /labels/{id}`, reuse via `POST /labels/{id}/log`)
@@ -38,3 +38,5 @@ Standard commands are in `README.md` and `pyproject.toml`. After `pip install -e
 - Override DB with `MYMACRO_DATABASE_URL` if needed.
 - `PUT /goals` upserts by day. `GET /goals/{day}` falls back to the most recent prior goal when the exact day has none.
 - No auth yet — the API is open for local development.
+
+- Barcode lookup uses `POST /barcode/lookup` and requires `MYMACRO_FATSECRET_CLIENT_ID` + `MYMACRO_FATSECRET_CLIENT_SECRET` in env.

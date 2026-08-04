@@ -50,7 +50,7 @@ def test_settings_rejects_mismatched_calories(client):
 
 
 def test_pages_exist(client):
-    for path in ["/", "/logs", "/micros", "/settings"]:
+    for path in ["/", "/barcode", "/logs", "/micros", "/settings"]:
         response = client.get(path)
         assert response.status_code == 200, path
         assert "nav" in response.text

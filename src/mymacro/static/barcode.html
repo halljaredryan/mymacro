@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mymacro — barcode</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <main>
+    <div id="nav"></div>
+    <h1>Barcode lookup</h1>
+    <p class="lede">Scan or enter a barcode to fetch nutrition from FatSecret, then log grams eaten.</p>
+
+    <section class="panel">
+      <div class="row">
+        <label>
+          Barcode
+          <input id="barcode" type="text" inputmode="numeric" placeholder="e.g. 012345678905" />
+        </label>
+        <label>
+          Label override (optional)
+          <input id="label" type="text" placeholder="Optional custom label" />
+        </label>
+      </div>
+      <div class="row">
+        <label>
+          Grams eaten
+          <input id="grams" type="number" min="0.1" step="0.1" value="100" />
+        </label>
+        <label>
+          Day
+          <input id="day" type="date" />
+        </label>
+      </div>
+      <div class="row">
+        <label>
+          Meal
+          <select id="meal">
+            <option value="breakfast">breakfast</option>
+            <option value="lunch">lunch</option>
+            <option value="dinner">dinner</option>
+            <option value="snack" selected>snack</option>
+          </select>
+        </label>
+        <label>
+          Notes (optional)
+          <input id="notes" type="text" />
+        </label>
+      </div>
+
+      <div class="stage" style="aspect-ratio:16/9" id="stage">
+        <video id="camera" playsinline autoplay muted hidden></video>
+        <div class="placeholder" id="placeholder">Start camera scanner or enter barcode manually.</div>
+      </div>
+      <div class="cam-actions">
+        <button type="button" class="primary" id="start-scan">Start camera scan</button>
+        <button type="button" id="stop-scan" disabled>Stop scan</button>
+        <button type="button" id="lookup" class="primary">Lookup &amp; log</button>
+      </div>
+      <p class="status" id="status"></p>
+      <div id="result" hidden></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script>
+    MyMacro.mountNav("barcode");
+    const barcodeInput = document.getElementById("barcode");
+    const labelInput = document.getElementById("label");
+    const gramsInput = document.getElementById("grams");
+    const dayInput = document.getElementById("day");
+    const mealInput = document.getElementById("meal");
+    const notesInput = document.getElementById("notes");
+    const startBtn = document.getElementById("start-scan");
+    const stopBtn = document.getElementById("stop-scan");
+    const lookupBtn = document.getElementById("lookup");
+    const statusEl = document.getElementById("status");
+    const resultEl = document.getElementById("result");
+    const camera = document.getElementById("camera");
+    const placeholder = document.getElementById("placeholder");
+
+    dayInput.value = MyMacro.todayISO();
+    let stream = null;
+    let detector = null;
+    let rafId = null;
+
+    function setStatus(msg) { statusEl.textContent = msg || ""; }
+
+    async function scanLoop() {
+      if (!detector || !camera || camera.readyState < 2) {
+        rafId = requestAnimationFrame(scanLoop);
+        return;
+      }
+      try {
+        const codes = await detector.detect(camera);
+        if (codes.length) {
+          const value = codes[0].rawValue || "";
+          if (value) {
+            barcodeInput.value = value;
+            setStatus(`Detected barcode: ${value}`);
+          }
+        }
+      } catch (err) {
+        setStatus(`Scan error: ${err.message || err}`);
+      }
+      rafId = requestAnimationFrame(scanLoop);
+    }
+
+    async function startScan() {
+      if (!("BarcodeDetector" in window)) {
+        setStatus("BarcodeDetector API unavailable. Enter barcode manually.");
+        return;
+      }
+      try {
+        detector = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
+      } catch {
+        detector = new BarcodeDetector();
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        camera.srcObject = stream;
+        await camera.play();
+        camera.hidden = false;
+        placeholder.hidden = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        setStatus("Camera scanning… hold barcode in frame.");
+        rafId = requestAnimationFrame(scanLoop);
+      } catch (err) {
+        setStatus(`Could not start scanner: ${err.message || err}`);
+      }
+    }
+
+    function stopScan() {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = null;
+      if (stream) {
+        for (const t of stream.getTracks()) t.stop();
+        stream = null;
+      }
+      camera.srcObject = null;
+      camera.hidden = true;
+      placeholder.hidden = false;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    }
+
+    startBtn.addEventListener("click", startScan);
+    stopBtn.addEventListener("click", stopScan);
+
+    lookupBtn.addEventListener("click", async () => {
+      resultEl.hidden = true;
+      const barcode = barcodeInput.value.trim();
+      const grams = Number(gramsInput.value);
+      if (!barcode) {
+        setStatus("Enter or scan a barcode first.");
+        return;
+      }
+      if (!Number.isFinite(grams) || grams <= 0) {
+        setStatus("Enter a valid grams amount.");
+        return;
+      }
+      lookupBtn.disabled = true;
+      setStatus("Looking up barcode…");
+      try {
+        const payload = {
+          barcode,
+          grams,
+          day: dayInput.value,
+          meal: mealInput.value,
+          notes: notesInput.value.trim() || null,
+          label: labelInput.value.trim() || null,
+        };
+        const response = await fetch("/barcode/lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+        }
+        setStatus(`Logged ${data.grams}g from barcode ${data.barcode}.`);
+        const m = data.scaled_macros;
+        resultEl.className = "result";
+        resultEl.innerHTML = `<strong>${MyMacro.escapeHtml(data.label)}</strong><div>${m.calories} kcal · P ${m.protein_g}g · C ${m.carbs_g}g · F ${m.fat_g}g</div>`;
+        resultEl.hidden = false;
+      } catch (err) {
+        setStatus(err.message || String(err));
+      } finally {
+        lookupBtn.disabled = false;
+      }
+    });
+
+    window.addEventListener("beforeunload", stopScan);
+  </script>
+</body>
+</html>
