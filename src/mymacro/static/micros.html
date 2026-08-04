@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mymacro — micronutrients</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <main>
+    <div id="nav"></div>
+    <h1>Micronutrients</h1>
+    <p class="lede">
+      Daily micronutrient intake from logged labels, shown as percent of FDA Daily Value.
+    </p>
+
+    <section class="panel">
+      <label>
+        Day
+        <input id="day" type="date" />
+      </label>
+      <div class="micro-list" id="micros-list">
+        <p class="hint">Loading…</p>
+      </div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+  <script>
+    MyMacro.mountNav("micros");
+    const dayInput = document.getElementById("day");
+    const list = document.getElementById("micros-list");
+    dayInput.value = MyMacro.todayISO();
+
+    function renderRows(rows) {
+      const withData = (rows || []).filter((row) => row.consumed > 0 || row.rdv != null);
+      if (!withData.length) {
+        list.innerHTML = `<p class="hint">No micronutrient intake logged for this day yet.</p>`;
+        return;
+      }
+      list.innerHTML = withData
+        .map((row) => {
+          const pct = row.percent_dv;
+          const width = pct == null ? 0 : Math.min(pct, 100);
+          const over = pct != null && pct > 100;
+          const right =
+            pct == null
+              ? `${row.consumed}${row.unit} (no DV)`
+              : `${row.consumed}${row.unit} · ${pct}% DV` +
+                (row.rdv != null ? ` of ${row.rdv}${row.unit}` : "");
+          return `
+            <div class="micro-row">
+              <header>
+                <span>${MyMacro.escapeHtml(row.label)}</span>
+                <span>${MyMacro.escapeHtml(right)}</span>
+              </header>
+              <div class="bar"><div class="fill ${over ? "over" : ""}" style="width:${width}%"></div></div>
+            </div>`;
+        })
+        .join("");
+    }
+
+    async function refresh() {
+      list.innerHTML = `<p class="hint">Loading…</p>`;
+      try {
+        const response = await fetch(`/days/${dayInput.value}/summary`);
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "Failed to load");
+        renderRows(payload.micronutrients || []);
+      } catch (err) {
+        list.innerHTML = `<p class="error">${MyMacro.escapeHtml(err.message || String(err))}</p>`;
+      }
+    }
+
+    dayInput.addEventListener("change", refresh);
+    refresh();
+  </script>
+</body>
+</html>

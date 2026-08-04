@@ -6,10 +6,11 @@
 
 **mymacro** is a FastAPI nutrition macro-tracking app (SQLite by default).
 
-- Scan UI: `http://127.0.0.1:8000/` (live webcam via `getUserMedia`, or file upload)
+- Pages: `/` scan, `/logs` daily food log, `/micros` micronutrient % DV, `/settings` ideal macro targets
 - API docs: `/docs`
 - Core scan endpoint: `POST /labels/scan` (multipart: `image`, **`label`**, `grams`, optional `day`/`meal`/`notes`)
 - Every scan persists a `SavedLabel` (`GET /labels?q=…`, rename via `PATCH /labels/{id}`, reuse via `POST /labels/{id}/log`)
+- Ideal targets: `GET/PUT /settings/targets` — calories must equal protein×4 + carbs×4 + fat×9 (auto-synced in the settings UI)
 
 ### Run / lint / test
 

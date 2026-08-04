@@ -51,6 +51,31 @@ class DailyGoalRead(DailyGoalCreate):
     created_at: datetime
 
 
+class IdealTargetsUpdate(BaseModel):
+    protein_g: float = Field(ge=0)
+    carbs_g: float = Field(ge=0)
+    fat_g: float = Field(ge=0)
+    calories: float | None = Field(default=None, gt=0)
+    sync_calories_from_macros: bool = True
+
+
+class IdealTargetsRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    calories: float
+    protein_g: float
+    carbs_g: float
+    fat_g: float
+    calories_from_macros: float
+    updated_at: datetime | None = None
+
+
+class DayListItem(BaseModel):
+    day: date
+    entry_count: int
+    consumed: Macros
+
+
 class FoodEntryCreate(BaseModel):
     food_id: int
     day: date

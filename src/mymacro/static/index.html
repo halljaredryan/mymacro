@@ -3,248 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>mymacro — scan label</title>
-  <style>
-    :root {
-      --bg: #0f1410;
-      --panel: #1a221c;
-      --ink: #e8f0e9;
-      --muted: #9aab9d;
-      --accent: #7dbe6a;
-      --accent-ink: #102012;
-      --danger: #e07070;
-      --border: #2c3a2f;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-      background:
-        radial-gradient(1200px 600px at 10% -10%, #243528 0%, transparent 55%),
-        var(--bg);
-      color: var(--ink);
-      min-height: 100vh;
-    }
-    main {
-      max-width: 640px;
-      margin: 0 auto;
-      padding: 2rem 1.25rem 3rem;
-    }
-    h1 {
-      font-family: "IBM Plex Serif", Georgia, serif;
-      font-weight: 600;
-      font-size: clamp(2rem, 5vw, 2.6rem);
-      margin: 0 0 0.35rem;
-      letter-spacing: -0.02em;
-    }
-    h2 {
-      font-size: 1.1rem;
-      margin: 0 0 0.75rem;
-      font-weight: 600;
-    }
-    .lede {
-      color: var(--muted);
-      margin: 0 0 1.75rem;
-      line-height: 1.45;
-    }
-    form, .panel {
-      display: grid;
-      gap: 1rem;
-      padding: 1.25rem;
-      background: color-mix(in srgb, var(--panel) 92%, black);
-      border: 1px solid var(--border);
-    }
-    label {
-      display: grid;
-      gap: 0.4rem;
-      font-size: 0.92rem;
-    }
-    input[type="number"],
-    input[type="date"],
-    input[type="text"],
-    input[type="file"],
-    select {
-      width: 100%;
-      padding: 0.7rem 0.8rem;
-      border: 1px solid var(--border);
-      background: #101612;
-      color: var(--ink);
-      font: inherit;
-    }
-    .stage {
-      position: relative;
-      aspect-ratio: 4 / 3;
-      border: 1px solid var(--border);
-      overflow: hidden;
-      background: #101612;
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-    .stage video,
-    .stage img,
-    .stage canvas {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .stage .placeholder {
-      position: absolute;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      padding: 1rem;
-      text-align: center;
-    }
-    .cam-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-    }
-    .cam-actions button,
-    .secondary {
-      background: transparent;
-      color: var(--ink);
-      border: 1px solid var(--border);
-      font: inherit;
-      font-weight: 600;
-      padding: 0.7rem 0.9rem;
-      cursor: pointer;
-    }
-    .cam-actions button.primary,
-    button[type="submit"] {
-      border: 0;
-      background: var(--accent);
-      color: var(--accent-ink);
-    }
-    .row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.75rem;
-    }
-    @media (max-width: 560px) {
-      .row { grid-template-columns: 1fr; }
-    }
-    button[type="submit"] {
-      font: inherit;
-      font-weight: 600;
-      padding: 0.85rem 1rem;
-      cursor: pointer;
-    }
-    button:disabled {
-      opacity: 0.55;
-      cursor: wait;
-    }
-    .result, .error {
-      margin-top: 0.25rem;
-      padding: 1rem 1.1rem;
-      border: 1px solid var(--border);
-      background: var(--panel);
-      line-height: 1.45;
-    }
-    .error { border-color: var(--danger); color: #ffd0d0; }
-    .macros {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 0.5rem;
-      margin-top: 0.75rem;
-    }
-    .macros div {
-      padding: 0.65rem 0.4rem;
-      text-align: center;
-      background: #101612;
-      border: 1px solid var(--border);
-    }
-    .macros strong { display: block; font-size: 1.05rem; }
-    .macros span { color: var(--muted); font-size: 0.75rem; }
-    a.doc { color: var(--accent); }
-    .saved-list {
-      display: grid;
-      gap: 0.65rem;
-      margin-top: 1.5rem;
-    }
-    .saved-item {
-      display: grid;
-      gap: 0.45rem;
-      padding: 0.85rem 0.95rem;
-      border: 1px solid var(--border);
-      background: var(--panel);
-    }
-    .saved-item strong { font-size: 1rem; }
-    .saved-item .meta { color: var(--muted); font-size: 0.85rem; }
-    .saved-item .item-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-top: 0.25rem;
-    }
-    .saved-item .item-actions button {
-      background: transparent;
-      color: var(--ink);
-      border: 1px solid var(--border);
-      font: inherit;
-      font-weight: 600;
-      padding: 0.55rem 0.8rem;
-      cursor: pointer;
-    }
-    .saved-item .item-actions button.primary {
-      border: 0;
-      background: var(--accent);
-      color: var(--accent-ink);
-    }
-    .reuse-form {
-      display: grid;
-      gap: 0.65rem;
-      margin-top: 0.35rem;
-      padding-top: 0.65rem;
-      border-top: 1px solid var(--border);
-    }
-    .hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
-    .status { color: var(--muted); font-size: 0.85rem; min-height: 1.2em; }
-    .missing-field {
-      outline: 1px solid var(--danger);
-      border-radius: 2px;
-      padding: 0.35rem;
-    }
-    .missing-field input { border-color: var(--danger); }
-    [hidden] { display: none !important; }
-    .micro-list { display: grid; gap: 0.65rem; }
-    .micro-row {
-      display: grid;
-      gap: 0.25rem;
-    }
-    .micro-row header {
-      display: flex;
-      justify-content: space-between;
-      gap: 0.75rem;
-      font-size: 0.9rem;
-    }
-    .micro-row .bar {
-      height: 0.55rem;
-      background: #101612;
-      border: 1px solid var(--border);
-      overflow: hidden;
-    }
-    .micro-row .fill {
-      height: 100%;
-      background: var(--accent);
-    }
-    .micro-row .fill.over { background: #d4a24c; }
-    .micro-optional {
-      display: grid;
-      gap: 0.75rem;
-      margin-top: 0.5rem;
-      padding-top: 0.75rem;
-      border-top: 1px solid var(--border);
-    }
-  </style>
+  <title>mymacro — scan</title>
+  <link rel="stylesheet" href="/static/app.css" />
 </head>
 <body>
   <main>
-    <h1>mymacro</h1>
+    <div id="nav"></div>
+    <h1>Scan label</h1>
     <p class="lede">
       Point your webcam at a nutrition label (or upload a photo), name it, enter grams eaten,
       and we’ll save the facts and add scaled macros to your day.
+      Use the tabs for daily logs, micronutrients, and settings.
       <a class="doc" href="/docs">API docs</a>
     </p>
 
@@ -360,20 +129,6 @@
 
     <div id="out" hidden></div>
 
-    <section class="panel" id="micros-panel" style="margin-top:1.25rem">
-      <h2>Daily micronutrients (% DV)</h2>
-      <p class="hint">
-        Tracks micronutrients from saved/logged labels and shows percent of FDA Daily Value for the selected day.
-      </p>
-      <label>
-        Day
-        <input id="micros-day" type="date" />
-      </label>
-      <div class="micro-list" id="micros-list">
-        <p class="hint">Log a food with micronutrients to see daily % DV here.</p>
-      </div>
-    </section>
-
     <section class="saved-list" aria-live="polite">
       <h2>Saved labels</h2>
       <label>
@@ -384,6 +139,7 @@
       <div id="saved-labels"><p class="hint">No saved labels yet.</p></div>
     </section>
   </main>
+  <script src="/static/app.js"></script>
   <script>
     const form = document.getElementById("scan-form");
     const imageInput = document.getElementById("image");
@@ -404,10 +160,7 @@
     const manualPanel = document.getElementById("manual-panel");
     const manualMessage = document.getElementById("manual-message");
     const manualSubmit = document.getElementById("manual-submit");
-    const microsDay = document.getElementById("micros-day");
-    const microsList = document.getElementById("micros-list");
     document.getElementById("day").valueAsDate = new Date();
-    microsDay.valueAsDate = new Date();
 
     const MANUAL_MICRO_FIELDS = [
       "sodium_mg",
@@ -678,7 +431,6 @@
         renderSuccess(payload);
         out.scrollIntoView({ behavior: "smooth", block: "nearest" });
         await refreshSavedLabels(labelSearch.value.trim());
-        await refreshMicronutrients(microsDay.value);
       } catch (err) {
         out.className = "error";
         out.textContent = err.message || String(err);
@@ -735,43 +487,6 @@
       return entries.map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · ");
     }
 
-    function renderMicroSummary(rows) {
-      const withData = (rows || []).filter((row) => row.consumed > 0 || row.rdv != null);
-      if (!withData.length) {
-        microsList.innerHTML = `<p class="hint">No micronutrient intake logged for this day yet.</p>`;
-        return;
-      }
-      microsList.innerHTML = withData.map((row) => {
-        const pct = row.percent_dv;
-        const width = pct == null ? 0 : Math.min(pct, 100);
-        const over = pct != null && pct > 100;
-        const right = pct == null
-          ? `${row.consumed}${row.unit} (no DV)`
-          : `${row.consumed}${row.unit} · ${pct}% DV` + (row.rdv != null ? ` of ${row.rdv}${row.unit}` : "");
-        return `
-          <div class="micro-row">
-            <header>
-              <span>${escapeHtml(row.label)}</span>
-              <span>${escapeHtml(right)}</span>
-            </header>
-            <div class="bar"><div class="fill ${over ? "over" : ""}" style="width:${width}%"></div></div>
-          </div>`;
-      }).join("");
-    }
-
-    async function refreshMicronutrients(day = microsDay.value || todayValue()) {
-      try {
-        const response = await fetch(`/days/${day}/summary`);
-        const payload = await response.json();
-        if (!response.ok) throw new Error("Failed to load day summary");
-        renderMicroSummary(payload.micronutrients || []);
-      } catch (err) {
-        microsList.innerHTML = `<p class="error">${escapeHtml(err.message || String(err))}</p>`;
-      }
-    }
-
-    microsDay.addEventListener("change", () => refreshMicronutrients(microsDay.value));
-
     function collectManualMicros() {
       const micros = {};
       for (const key of MANUAL_MICRO_FIELDS) {
@@ -804,10 +519,6 @@
           Micros added: ${escapeHtml(formatMicros(payload.scaled_micronutrients))}
         </div>`;
       out.hidden = false;
-      if (payload.summary?.day) {
-        microsDay.value = payload.summary.day;
-      }
-      renderMicroSummary(payload.summary?.micronutrients || []);
     }
 
     form.addEventListener("submit", async (event) => {
@@ -867,7 +578,6 @@
         hideManualPanel();
         renderSuccess(payload);
         await refreshSavedLabels();
-        await refreshMicronutrients(microsDay.value);
       } catch (err) {
         out.className = "error";
         out.textContent = err.message || String(err);
@@ -921,7 +631,6 @@
         hideManualPanel();
         renderSuccess(payload);
         await refreshSavedLabels();
-        await refreshMicronutrients(microsDay.value);
       } catch (err) {
         out.className = "error";
         out.textContent = err.message || String(err);
@@ -932,8 +641,8 @@
       }
     });
 
+    MyMacro.mountNav("scan");
     refreshSavedLabels();
-    refreshMicronutrients();
     window.addEventListener("beforeunload", stopWebcam);
   </script>
 </body>

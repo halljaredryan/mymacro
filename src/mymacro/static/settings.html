@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mymacro — settings</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <main>
+    <div id="nav"></div>
+    <h1>Settings</h1>
+    <p class="lede">
+      Set your ideal daily macro targets. Calories are kept in sync with
+      protein×4 + carbs×4 + fat×9.
+    </p>
+
+    <form class="panel" id="targets-form">
+      <div class="row">
+        <label>
+          Protein (g)
+          <input id="protein_g" type="number" min="0" step="0.1" required />
+        </label>
+        <label>
+          Carbs (g)
+          <input id="carbs_g" type="number" min="0" step="0.1" required />
+        </label>
+      </div>
+      <div class="row">
+        <label>
+          Fat (g)
+          <input id="fat_g" type="number" min="0" step="0.1" required />
+        </label>
+        <label>
+          Calories (kcal)
+          <input id="calories" type="number" min="1" step="0.01" required />
+        </label>
+      </div>
+      <div id="eq" class="eq-box">Calories = protein×4 + carbs×4 + fat×9</div>
+      <p class="hint">
+        Changing protein, carbs, or fat updates calories automatically.
+        Saving also syncs today’s daily goal.
+      </p>
+      <button type="submit" id="save">Save ideal targets</button>
+      <div id="status" hidden></div>
+    </form>
+  </main>
+  <script src="/static/app.js"></script>
+  <script>
+    MyMacro.mountNav("settings");
+    const proteinInput = document.getElementById("protein_g");
+    const carbsInput = document.getElementById("carbs_g");
+    const fatInput = document.getElementById("fat_g");
+    const caloriesInput = document.getElementById("calories");
+    const eq = document.getElementById("eq");
+    const status = document.getElementById("status");
+    const form = document.getElementById("targets-form");
+    let syncingFromMacros = false;
+
+    function readMacros() {
+      return {
+        protein_g: Number(proteinInput.value) || 0,
+        carbs_g: Number(carbsInput.value) || 0,
+        fat_g: Number(fatInput.value) || 0,
+      };
+    }
+
+    function updateEquation() {
+      const { protein_g, carbs_g, fat_g } = readMacros();
+      const computed = MyMacro.caloriesFromMacros(protein_g, carbs_g, fat_g);
+      const calories = Number(caloriesInput.value) || 0;
+      const ok = Math.abs(computed - calories) <= 1;
+      eq.className = `eq-box ${ok ? "ok" : "bad"}`;
+      eq.textContent = ok
+        ? `Balanced: ${computed} kcal = ${protein_g}g P×4 + ${carbs_g}g C×4 + ${fat_g}g F×9`
+        : `Mismatch: macros total ${computed} kcal, but calories field is ${calories}. Adjust macros or recalculate.`;
+      return { computed, ok, protein_g, carbs_g, fat_g, calories };
+    }
+
+    function syncCaloriesFromMacros() {
+      syncingFromMacros = true;
+      const { protein_g, carbs_g, fat_g } = readMacros();
+      caloriesInput.value = MyMacro.caloriesFromMacros(protein_g, carbs_g, fat_g);
+      syncingFromMacros = false;
+      updateEquation();
+    }
+
+    for (const input of [proteinInput, carbsInput, fatInput]) {
+      input.addEventListener("input", syncCaloriesFromMacros);
+    }
+    caloriesInput.addEventListener("input", () => {
+      if (syncingFromMacros) return;
+      updateEquation();
+    });
+
+    async function loadTargets() {
+      const response = await fetch("/settings/targets");
+      const data = await response.json();
+      proteinInput.value = data.protein_g;
+      carbsInput.value = data.carbs_g;
+      fatInput.value = data.fat_g;
+      caloriesInput.value = data.calories;
+      updateEquation();
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      status.hidden = true;
+      const state = updateEquation();
+      // Always persist calories from macros so the three macros equate to calories.
+      const body = {
+        protein_g: state.protein_g,
+        carbs_g: state.carbs_g,
+        fat_g: state.fat_g,
+        sync_calories_from_macros: true,
+      };
+      try {
+        const response = await fetch("/settings/targets", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+        }
+        proteinInput.value = data.protein_g;
+        carbsInput.value = data.carbs_g;
+        fatInput.value = data.fat_g;
+        caloriesInput.value = data.calories;
+        updateEquation();
+        status.hidden = false;
+        status.className = "result";
+        status.textContent = `Saved. Ideal target is ${data.calories} kcal (P ${data.protein_g}g / C ${data.carbs_g}g / F ${data.fat_g}g).`;
+      } catch (err) {
+        status.hidden = false;
+        status.className = "error";
+        status.textContent = err.message || String(err);
+      }
+    });
+
+    loadTargets();
+  </script>
+</body>
+</html>

@@ -34,12 +34,31 @@ if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+def _page(name: str) -> FileResponse:
+    path = STATIC_DIR / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Page not found: {name}")
+    return FileResponse(path)
+
+
 @app.get("/", include_in_schema=False)
 def ui() -> FileResponse:
-    index = STATIC_DIR / "index.html"
-    if not index.is_file():
-        raise HTTPException(status_code=404, detail="UI not found")
-    return FileResponse(index)
+    return _page("index.html")
+
+
+@app.get("/logs", include_in_schema=False)
+def logs_page() -> FileResponse:
+    return _page("logs.html")
+
+
+@app.get("/micros", include_in_schema=False)
+def micros_page() -> FileResponse:
+    return _page("micros.html")
+
+
+@app.get("/settings", include_in_schema=False)
+def settings_page() -> FileResponse:
+    return _page("settings.html")
 
 
 @app.get("/health")
@@ -96,10 +115,39 @@ def upsert_goal(payload: schemas.DailyGoalCreate, db: DbSession) -> schemas.Dail
 
 @app.get("/goals/{day}", response_model=schemas.DailyGoalRead)
 def get_goal(day: date, db: DbSession) -> schemas.DailyGoalRead:
-    goal = crud.get_goal_for_day(db, day)
-    if not goal:
+    goal_read, _ = services.resolve_day_goal(db, day)
+    if not goal_read:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No goal set")
-    return schemas.DailyGoalRead.model_validate(goal)
+    return goal_read
+
+
+@app.get("/settings/targets", response_model=schemas.IdealTargetsRead)
+def get_ideal_targets(db: DbSession) -> schemas.IdealTargetsRead:
+    row = crud.get_or_create_ideal_targets(db)
+    return services.ideal_targets_to_read(row)
+
+
+@app.put("/settings/targets", response_model=schemas.IdealTargetsRead)
+def put_ideal_targets(
+    payload: schemas.IdealTargetsUpdate, db: DbSession
+) -> schemas.IdealTargetsRead:
+    try:
+        row = crud.update_ideal_targets(db, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    # Keep today's daily goal aligned with the new ideal targets.
+    crud.upsert_daily_goal(
+        db,
+        schemas.DailyGoalCreate(
+            day=date.today(),
+            calories=row.calories,
+            protein_g=row.protein_g,
+            carbs_g=row.carbs_g,
+            fat_g=row.fat_g,
+            notes="synced from ideal targets",
+        ),
+    )
+    return services.ideal_targets_to_read(row)
 
 
 @app.post("/entries", response_model=schemas.FoodEntryRead, status_code=status.HTTP_201_CREATED)
@@ -114,6 +162,11 @@ def create_entry(payload: schemas.FoodEntryCreate, db: DbSession) -> schemas.Foo
 def delete_entry(entry_id: int, db: DbSession) -> None:
     if not crud.delete_entry(db, entry_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
+
+
+@app.get("/days", response_model=list[schemas.DayListItem])
+def list_days(db: DbSession) -> list[schemas.DayListItem]:
+    return services.list_day_summaries(db)
 
 
 @app.get("/days/{day}/summary", response_model=schemas.DaySummary)

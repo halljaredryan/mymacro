@@ -52,6 +52,21 @@ class DailyGoal(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class IdealTargets(Base):
+    """User's default / ideal daily macro targets (singleton row id=1)."""
+
+    __tablename__ = "ideal_targets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    calories: Mapped[float] = mapped_column(Float, default=2000.0)
+    protein_g: Mapped[float] = mapped_column(Float, default=150.0)
+    carbs_g: Mapped[float] = mapped_column(Float, default=200.0)
+    fat_g: Mapped[float] = mapped_column(Float, default=66.67)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class FoodEntry(Base):
     """A logged consumption of a food on a given day."""
 

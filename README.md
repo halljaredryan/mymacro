@@ -28,6 +28,9 @@ uvicorn mymacro.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 - Scan UI (live webcam + file upload): http://127.0.0.1:8000/
+- Daily logs: http://127.0.0.1:8000/logs
+- Micronutrients % DV: http://127.0.0.1:8000/micros
+- Settings (ideal macro targets): http://127.0.0.1:8000/settings
 - Interactive docs: http://127.0.0.1:8000/docs
 - Health: http://127.0.0.1:8000/health
 
