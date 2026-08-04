@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mymacro"
+version = "0.1.0"
+description = "Nutrition macro tracking API"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "sqlalchemy>=2.0.36",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "python-multipart>=0.0.12",
+    "httpx>=0.28.0",
+    "pillow>=11.0.0",
+    "pytesseract>=0.3.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "ruff>=0.8.0",
+]
+
+[project.scripts]
+mymacro = "mymacro.main:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mymacro"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/mymacro/static" = "mymacro/static"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

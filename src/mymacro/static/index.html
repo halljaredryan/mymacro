@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mymacro — scan label</title>
+  <style>
+    :root {
+      --bg: #0f1410;
+      --panel: #1a221c;
+      --ink: #e8f0e9;
+      --muted: #9aab9d;
+      --accent: #7dbe6a;
+      --accent-ink: #102012;
+      --danger: #e07070;
+      --border: #2c3a2f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #243528 0%, transparent 55%),
+        var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+    }
+    h1 {
+      font-family: "IBM Plex Serif", Georgia, serif;
+      font-weight: 600;
+      font-size: clamp(2rem, 5vw, 2.6rem);
+      margin: 0 0 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      font-size: 1.1rem;
+      margin: 0 0 0.75rem;
+      font-weight: 600;
+    }
+    .lede {
+      color: var(--muted);
+      margin: 0 0 1.75rem;
+      line-height: 1.45;
+    }
+    form, .panel {
+      display: grid;
+      gap: 1rem;
+      padding: 1.25rem;
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid var(--border);
+    }
+    label {
+      display: grid;
+      gap: 0.4rem;
+      font-size: 0.92rem;
+    }
+    input[type="number"],
+    input[type="date"],
+    input[type="text"],
+    input[type="file"],
+    select {
+      width: 100%;
+      padding: 0.7rem 0.8rem;
+      border: 1px solid var(--border);
+      background: #101612;
+      color: var(--ink);
+      font: inherit;
+    }
+    .stage {
+      position: relative;
+      aspect-ratio: 4 / 3;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      background: #101612;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .stage video,
+    .stage img,
+    .stage canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .stage .placeholder {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      text-align: center;
+    }
+    .cam-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .cam-actions button,
+    .secondary {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--border);
+      font: inherit;
+      font-weight: 600;
+      padding: 0.7rem 0.9rem;
+      cursor: pointer;
+    }
+    .cam-actions button.primary,
+    button[type="submit"] {
+      border: 0;
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    @media (max-width: 560px) {
+      .row { grid-template-columns: 1fr; }
+    }
+    button[type="submit"] {
+      font: inherit;
+      font-weight: 600;
+      padding: 0.85rem 1rem;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+    .result, .error {
+      margin-top: 0.25rem;
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      line-height: 1.45;
+    }
+    .error { border-color: var(--danger); color: #ffd0d0; }
+    .macros {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .macros div {
+      padding: 0.65rem 0.4rem;
+      text-align: center;
+      background: #101612;
+      border: 1px solid var(--border);
+    }
+    .macros strong { display: block; font-size: 1.05rem; }
+    .macros span { color: var(--muted); font-size: 0.75rem; }
+    a.doc { color: var(--accent); }
+    .saved-list {
+      display: grid;
+      gap: 0.65rem;
+      margin-top: 1.5rem;
+    }
+    .saved-item {
+      display: grid;
+      gap: 0.45rem;
+      padding: 0.85rem 0.95rem;
+      border: 1px solid var(--border);
+      background: var(--panel);
+    }
+    .saved-item strong { font-size: 1rem; }
+    .saved-item .meta { color: var(--muted); font-size: 0.85rem; }
+    .saved-item .item-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+    }
+    .saved-item .item-actions button {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--border);
+      font: inherit;
+      font-weight: 600;
+      padding: 0.55rem 0.8rem;
+      cursor: pointer;
+    }
+    .saved-item .item-actions button.primary {
+      border: 0;
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+    .reuse-form {
+      display: grid;
+      gap: 0.65rem;
+      margin-top: 0.35rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid var(--border);
+    }
+    .hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
+    .status { color: var(--muted); font-size: 0.85rem; min-height: 1.2em; }
+    .missing-field {
+      outline: 1px solid var(--danger);
+      border-radius: 2px;
+      padding: 0.35rem;
+    }
+    .missing-field input { border-color: var(--danger); }
+    [hidden] { display: none !important; }
+    .micro-list { display: grid; gap: 0.65rem; }
+    .micro-row {
+      display: grid;
+      gap: 0.25rem;
+    }
+    .micro-row header {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      font-size: 0.9rem;
+    }
+    .micro-row .bar {
+      height: 0.55rem;
+      background: #101612;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .micro-row .fill {
+      height: 100%;
+      background: var(--accent);
+    }
+    .micro-row .fill.over { background: #d4a24c; }
+    .micro-optional {
+      display: grid;
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>mymacro</h1>
+    <p class="lede">
+      Point your webcam at a nutrition label (or upload a photo), name it, enter grams eaten,
+      and we’ll save the facts and add scaled macros to your day.
+      <a class="doc" href="/docs">API docs</a>
+    </p>
+
+    <form id="scan-form">
+      <div>
+        <h2>1. Capture label</h2>
+        <div class="stage" id="stage">
+          <video id="webcam" playsinline autoplay muted hidden></video>
+          <img id="snapshot" alt="Captured nutrition label" hidden />
+          <div class="placeholder" id="placeholder">Start the webcam or choose a photo</div>
+        </div>
+        <canvas id="capture-canvas" hidden></canvas>
+        <div class="cam-actions" style="margin-top:0.75rem">
+          <button type="button" class="primary" id="start-cam">Start webcam</button>
+          <button type="button" id="capture-btn" disabled>Capture frame</button>
+          <button type="button" id="retake-btn" disabled>Retake</button>
+          <button type="button" id="stop-cam" disabled>Stop webcam</button>
+        </div>
+        <p class="status" id="cam-status"></p>
+        <label style="margin-top:0.5rem">
+          Or upload a photo
+          <input id="image" name="image" type="file" accept="image/*" capture="environment" />
+        </label>
+      </div>
+
+      <label>
+        Label name
+        <input id="label" name="label" type="text" maxlength="200" placeholder="e.g. Trader Joe's peanut butter" required />
+      </label>
+
+      <div class="row">
+        <label>
+          Grams eaten
+          <input id="grams" name="grams" type="number" min="0.1" step="0.1" value="50" required />
+        </label>
+        <label>
+          Day
+          <input id="day" name="day" type="date" required />
+        </label>
+      </div>
+      <div class="row">
+        <label>
+          Meal
+          <select id="meal" name="meal">
+            <option value="breakfast">breakfast</option>
+            <option value="lunch">lunch</option>
+            <option value="dinner">dinner</option>
+            <option value="snack" selected>snack</option>
+          </select>
+        </label>
+        <label>
+          Notes (optional)
+          <input id="notes" name="notes" type="text" placeholder="e.g. post-workout" />
+        </label>
+      </div>
+      <p class="hint">Every scan is saved under the label name with the parsed nutrition facts.</p>
+      <button type="submit" id="submit">Scan, save &amp; log</button>
+    </form>
+
+    <section class="panel" id="manual-panel" hidden style="margin-top:1rem">
+      <h2>Manual nutrition facts</h2>
+      <p class="hint" id="manual-message">
+        We couldn’t read some values from the label. Fill in the missing fields below.
+      </p>
+      <div class="row">
+        <label id="wrap-serving_size_g">
+          Serving size (g)
+          <input id="manual-serving_size_g" type="number" min="0.1" step="0.1" />
+        </label>
+        <label id="wrap-calories">
+          Calories (per serving)
+          <input id="manual-calories" type="number" min="0" step="0.1" />
+        </label>
+      </div>
+      <div class="row">
+        <label id="wrap-protein_g">
+          Protein (g)
+          <input id="manual-protein_g" type="number" min="0" step="0.1" />
+        </label>
+        <label id="wrap-carbs_g">
+          Carbs (g)
+          <input id="manual-carbs_g" type="number" min="0" step="0.1" />
+        </label>
+      </div>
+      <div class="row">
+        <label id="wrap-fat_g">
+          Fat (g)
+          <input id="manual-fat_g" type="number" min="0" step="0.1" />
+        </label>
+        <div></div>
+      </div>
+      <div class="micro-optional">
+        <p class="hint">Optional micronutrients (per label serving)</p>
+        <div class="row">
+          <label>Sodium (mg)<input id="manual-sodium_mg" type="number" min="0" step="1" /></label>
+          <label>Fiber (g)<input id="manual-fiber_g" type="number" min="0" step="0.1" /></label>
+        </div>
+        <div class="row">
+          <label>Potassium (mg)<input id="manual-potassium_mg" type="number" min="0" step="1" /></label>
+          <label>Calcium (mg)<input id="manual-calcium_mg" type="number" min="0" step="1" /></label>
+        </div>
+        <div class="row">
+          <label>Iron (mg)<input id="manual-iron_mg" type="number" min="0" step="0.1" /></label>
+          <label>Vitamin D (mcg)<input id="manual-vitamin_d_mcg" type="number" min="0" step="0.1" /></label>
+        </div>
+        <div class="row">
+          <label>Added sugars (g)<input id="manual-added_sugars_g" type="number" min="0" step="0.1" /></label>
+          <label>Cholesterol (mg)<input id="manual-cholesterol_mg" type="number" min="0" step="1" /></label>
+        </div>
+      </div>
+      <button type="button" id="manual-submit">Save manual facts &amp; log</button>
+    </section>
+
+    <div id="out" hidden></div>
+
+    <section class="panel" id="micros-panel" style="margin-top:1.25rem">
+      <h2>Daily micronutrients (% DV)</h2>
+      <p class="hint">
+        Tracks micronutrients from saved/logged labels and shows percent of FDA Daily Value for the selected day.
+      </p>
+      <label>
+        Day
+        <input id="micros-day" type="date" />
+      </label>
+      <div class="micro-list" id="micros-list">
+        <p class="hint">Log a food with micronutrients to see daily % DV here.</p>
+      </div>
+    </section>
+
+    <section class="saved-list" aria-live="polite">
+      <h2>Saved labels</h2>
+      <label>
+        Search saved labels
+        <input id="label-search" type="search" placeholder="Search by name…" autocomplete="off" />
+      </label>
+      <p class="hint" id="search-status"></p>
+      <div id="saved-labels"><p class="hint">No saved labels yet.</p></div>
+    </section>
+  </main>
+  <script>
+    const form = document.getElementById("scan-form");
+    const imageInput = document.getElementById("image");
+    const webcam = document.getElementById("webcam");
+    const snapshot = document.getElementById("snapshot");
+    const placeholder = document.getElementById("placeholder");
+    const canvas = document.getElementById("capture-canvas");
+    const camStatus = document.getElementById("cam-status");
+    const startCam = document.getElementById("start-cam");
+    const captureBtn = document.getElementById("capture-btn");
+    const retakeBtn = document.getElementById("retake-btn");
+    const stopCam = document.getElementById("stop-cam");
+    const out = document.getElementById("out");
+    const submit = document.getElementById("submit");
+    const savedLabelsEl = document.getElementById("saved-labels");
+    const labelSearch = document.getElementById("label-search");
+    const searchStatus = document.getElementById("search-status");
+    const manualPanel = document.getElementById("manual-panel");
+    const manualMessage = document.getElementById("manual-message");
+    const manualSubmit = document.getElementById("manual-submit");
+    const microsDay = document.getElementById("micros-day");
+    const microsList = document.getElementById("micros-list");
+    document.getElementById("day").valueAsDate = new Date();
+    microsDay.valueAsDate = new Date();
+
+    const MANUAL_MICRO_FIELDS = [
+      "sodium_mg",
+      "fiber_g",
+      "potassium_mg",
+      "calcium_mg",
+      "iron_mg",
+      "vitamin_d_mcg",
+      "added_sugars_g",
+      "cholesterol_mg",
+    ];
+
+    let mediaStream = null;
+    let capturedBlob = null;
+    let pendingRawText = null;
+    let pendingProductName = null;
+    let allSavedLabels = [];
+    let activeReuseId = null;
+    let searchTimer = null;
+
+    const MANUAL_FIELDS = [
+      ["serving_size_g", "serving size (g)"],
+      ["calories", "calories"],
+      ["protein_g", "protein"],
+      ["carbs_g", "carbohydrates"],
+      ["fat_g", "fat"],
+    ];
+
+    function setStatus(message) {
+      camStatus.textContent = message || "";
+    }
+
+    function showLive() {
+      placeholder.hidden = true;
+      snapshot.hidden = true;
+      webcam.hidden = false;
+    }
+
+    function showSnapshot(url) {
+      placeholder.hidden = true;
+      webcam.hidden = true;
+      snapshot.src = url;
+      snapshot.hidden = false;
+    }
+
+    function showPlaceholder() {
+      webcam.hidden = true;
+      snapshot.hidden = true;
+      placeholder.hidden = false;
+    }
+
+    async function startWebcam() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setStatus("Webcam API not available in this browser.");
+        return;
+      }
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+        webcam.srcObject = mediaStream;
+        await webcam.play();
+        showLive();
+        captureBtn.disabled = false;
+        retakeBtn.disabled = true;
+        stopCam.disabled = false;
+        startCam.disabled = true;
+        capturedBlob = null;
+        imageInput.value = "";
+        setStatus("Webcam live — frame the nutrition facts, then Capture.");
+      } catch (err) {
+        setStatus(`Could not open webcam: ${err.message || err}`);
+      }
+    }
+
+    function stopWebcam() {
+      if (mediaStream) {
+        for (const track of mediaStream.getTracks()) track.stop();
+        mediaStream = null;
+      }
+      webcam.srcObject = null;
+      captureBtn.disabled = true;
+      stopCam.disabled = true;
+      startCam.disabled = false;
+      if (!capturedBlob && !imageInput.files?.length) {
+        showPlaceholder();
+        retakeBtn.disabled = true;
+      }
+      setStatus(capturedBlob ? "Using captured frame." : "");
+    }
+
+    function captureFrame() {
+      if (!mediaStream) return;
+      const width = webcam.videoWidth || 1280;
+      const height = webcam.videoHeight || 720;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(webcam, 0, 0, width, height);
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          setStatus("Failed to capture frame.");
+          return;
+        }
+        capturedBlob = blob;
+        imageInput.value = "";
+        showSnapshot(URL.createObjectURL(blob));
+        retakeBtn.disabled = false;
+        setStatus("Frame captured — add a label name and grams, then submit.");
+      }, "image/jpeg", 0.92);
+    }
+
+    function retake() {
+      capturedBlob = null;
+      if (mediaStream) {
+        showLive();
+        captureBtn.disabled = false;
+        retakeBtn.disabled = true;
+        setStatus("Webcam live — capture again when ready.");
+      } else {
+        showPlaceholder();
+        retakeBtn.disabled = true;
+        setStatus("");
+      }
+    }
+
+    startCam.addEventListener("click", startWebcam);
+    captureBtn.addEventListener("click", captureFrame);
+    retakeBtn.addEventListener("click", retake);
+    stopCam.addEventListener("click", stopWebcam);
+
+    imageInput.addEventListener("change", () => {
+      const file = imageInput.files?.[0];
+      if (!file) return;
+      capturedBlob = null;
+      stopWebcam();
+      showSnapshot(URL.createObjectURL(file));
+      retakeBtn.disabled = false;
+      setStatus("Using uploaded photo.");
+    });
+
+    function todayValue() {
+      return document.getElementById("day").value || new Date().toISOString().slice(0, 10);
+    }
+
+    function renderSavedLabels(items, query = "") {
+      allSavedLabels = items;
+      if (!items.length) {
+        savedLabelsEl.innerHTML = `<p class="hint">${
+          query ? "No saved labels match that search." : "No saved labels yet."
+        }</p>`;
+        searchStatus.textContent = query ? "0 matches" : "";
+        return;
+      }
+      searchStatus.textContent = query ? `${items.length} match${items.length === 1 ? "" : "es"}` : `${items.length} saved`;
+      savedLabelsEl.innerHTML = items.map((item) => {
+        const open = activeReuseId === item.id;
+        return `
+          <article class="saved-item" data-id="${item.id}">
+            <strong>${escapeHtml(item.label)}</strong>
+            <div class="meta">
+              Serving ${item.serving_size_g}g ·
+              ${item.calories} kcal ·
+              P ${item.protein_g}g ·
+              C ${item.carbs_g}g ·
+              F ${item.fat_g}g
+            </div>
+            <div class="meta">
+              OCR name: ${escapeHtml(item.ocr_product_name || "—")} ·
+              saved ${new Date(item.created_at).toLocaleString()}
+            </div>
+            <div class="meta">${escapeHtml(formatMicros(item.micronutrients))}</div>
+            <div class="item-actions">
+              <button type="button" class="primary reuse-toggle" data-id="${item.id}">
+                ${open ? "Cancel" : "Reuse · log grams"}
+              </button>
+            </div>
+            <div class="reuse-form" data-reuse-form="${item.id}" ${open ? "" : "hidden"}>
+              <div class="row">
+                <label>
+                  Grams eaten
+                  <input class="reuse-grams" type="number" min="0.1" step="0.1" value="${item.serving_size_g}" />
+                </label>
+                <label>
+                  Day
+                  <input class="reuse-day" type="date" value="${todayValue()}" />
+                </label>
+              </div>
+              <div class="row">
+                <label>
+                  Meal
+                  <select class="reuse-meal">
+                    <option value="breakfast">breakfast</option>
+                    <option value="lunch">lunch</option>
+                    <option value="dinner">dinner</option>
+                    <option value="snack" selected>snack</option>
+                  </select>
+                </label>
+                <label>
+                  Notes (optional)
+                  <input class="reuse-notes" type="text" placeholder="optional" />
+                </label>
+              </div>
+              <button type="button" class="primary reuse-submit" data-id="${item.id}">
+                Log this amount
+              </button>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    async function refreshSavedLabels(query = labelSearch.value.trim()) {
+      try {
+        const url = query ? `/labels?q=${encodeURIComponent(query)}` : "/labels";
+        const response = await fetch(url);
+        const items = await response.json();
+        if (!response.ok) throw new Error("Failed to load saved labels");
+        renderSavedLabels(items, query);
+      } catch (err) {
+        savedLabelsEl.innerHTML = `<p class="error">${escapeHtml(err.message || String(err))}</p>`;
+      }
+    }
+
+    labelSearch.addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => refreshSavedLabels(labelSearch.value.trim()), 200);
+    });
+
+    savedLabelsEl.addEventListener("click", async (event) => {
+      const toggle = event.target.closest(".reuse-toggle");
+      if (toggle) {
+        const id = Number(toggle.dataset.id);
+        activeReuseId = activeReuseId === id ? null : id;
+        renderSavedLabels(allSavedLabels, labelSearch.value.trim());
+        return;
+      }
+
+      const submitBtn = event.target.closest(".reuse-submit");
+      if (!submitBtn) return;
+
+      const id = Number(submitBtn.dataset.id);
+      const card = submitBtn.closest(".saved-item");
+      const grams = Number(card.querySelector(".reuse-grams").value);
+      const day = card.querySelector(".reuse-day").value;
+      const meal = card.querySelector(".reuse-meal").value;
+      const notes = card.querySelector(".reuse-notes").value.trim() || null;
+
+      out.hidden = true;
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Logging…";
+      try {
+        if (!Number.isFinite(grams) || grams <= 0) {
+          throw new Error("Enter a valid grams amount.");
+        }
+        const response = await fetch(`/labels/${id}/log`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ grams, day, meal, notes }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          const detail = payload.detail;
+          throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+        }
+        activeReuseId = null;
+        renderSuccess(payload);
+        out.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        await refreshSavedLabels(labelSearch.value.trim());
+        await refreshMicronutrients(microsDay.value);
+      } catch (err) {
+        out.className = "error";
+        out.textContent = err.message || String(err);
+        out.hidden = false;
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Log this amount";
+      }
+    });
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function hideManualPanel() {
+      manualPanel.hidden = true;
+      pendingRawText = null;
+      pendingProductName = null;
+      for (const [key] of MANUAL_FIELDS) {
+        const wrap = document.getElementById(`wrap-${key}`);
+        wrap.classList.remove("missing-field");
+        document.getElementById(`manual-${key}`).value = "";
+      }
+    }
+
+    function showManualPanel(detail) {
+      const missing = detail.missing || [];
+      const partial = detail.partial || {};
+      pendingRawText = detail.raw_text || null;
+      pendingProductName = partial.product_name || null;
+      manualMessage.textContent = detail.message
+        || "Could not read some nutrition facts. Enter the missing values below.";
+      for (const [key, label] of MANUAL_FIELDS) {
+        const input = document.getElementById(`manual-${key}`);
+        const wrap = document.getElementById(`wrap-${key}`);
+        if (partial[key] != null && partial[key] !== "") {
+          input.value = partial[key];
+        } else {
+          input.value = "";
+        }
+        wrap.classList.toggle("missing-field", missing.includes(label));
+      }
+      manualPanel.hidden = false;
+      manualPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function formatMicros(map) {
+      const entries = Object.entries(map || {});
+      if (!entries.length) return "No micronutrients on this label";
+      return entries.map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · ");
+    }
+
+    function renderMicroSummary(rows) {
+      const withData = (rows || []).filter((row) => row.consumed > 0 || row.rdv != null);
+      if (!withData.length) {
+        microsList.innerHTML = `<p class="hint">No micronutrient intake logged for this day yet.</p>`;
+        return;
+      }
+      microsList.innerHTML = withData.map((row) => {
+        const pct = row.percent_dv;
+        const width = pct == null ? 0 : Math.min(pct, 100);
+        const over = pct != null && pct > 100;
+        const right = pct == null
+          ? `${row.consumed}${row.unit} (no DV)`
+          : `${row.consumed}${row.unit} · ${pct}% DV` + (row.rdv != null ? ` of ${row.rdv}${row.unit}` : "");
+        return `
+          <div class="micro-row">
+            <header>
+              <span>${escapeHtml(row.label)}</span>
+              <span>${escapeHtml(right)}</span>
+            </header>
+            <div class="bar"><div class="fill ${over ? "over" : ""}" style="width:${width}%"></div></div>
+          </div>`;
+      }).join("");
+    }
+
+    async function refreshMicronutrients(day = microsDay.value || todayValue()) {
+      try {
+        const response = await fetch(`/days/${day}/summary`);
+        const payload = await response.json();
+        if (!response.ok) throw new Error("Failed to load day summary");
+        renderMicroSummary(payload.micronutrients || []);
+      } catch (err) {
+        microsList.innerHTML = `<p class="error">${escapeHtml(err.message || String(err))}</p>`;
+      }
+    }
+
+    microsDay.addEventListener("change", () => refreshMicronutrients(microsDay.value));
+
+    function collectManualMicros() {
+      const micros = {};
+      for (const key of MANUAL_MICRO_FIELDS) {
+        const raw = document.getElementById(`manual-${key}`).value;
+        if (raw === "" || raw == null) continue;
+        const value = Number(raw);
+        if (Number.isFinite(value) && value >= 0) micros[key] = value;
+      }
+      return micros;
+    }
+
+    function renderSuccess(payload) {
+      const m = payload.scaled_macros;
+      const c = payload.summary.consumed;
+      out.className = "result";
+      out.innerHTML = `
+        <strong>${escapeHtml(payload.label)}</strong>
+        <div>Saved label #${payload.saved_label.id} · source: ${escapeHtml(payload.source || "scan")} · OCR: ${escapeHtml(payload.facts.product_name)}</div>
+        <div>Label serving: ${payload.facts.serving_size_g}g · Logged: ${payload.grams}g (${payload.servings} servings)</div>
+        <div class="macros">
+          <div><strong>${m.calories}</strong><span>kcal added</span></div>
+          <div><strong>${m.protein_g}g</strong><span>protein</span></div>
+          <div><strong>${m.carbs_g}g</strong><span>carbs</span></div>
+          <div><strong>${m.fat_g}g</strong><span>fat</span></div>
+        </div>
+        <div style="margin-top:0.85rem;color:var(--muted)">
+          Day total: ${c.calories} kcal · P ${c.protein_g}g · C ${c.carbs_g}g · F ${c.fat_g}g
+        </div>
+        <div style="margin-top:0.55rem;color:var(--muted)">
+          Micros added: ${escapeHtml(formatMicros(payload.scaled_micronutrients))}
+        </div>`;
+      out.hidden = false;
+      if (payload.summary?.day) {
+        microsDay.value = payload.summary.day;
+      }
+      renderMicroSummary(payload.summary?.micronutrients || []);
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      out.hidden = true;
+      hideManualPanel();
+      submit.disabled = true;
+      submit.textContent = "Reading label…";
+
+      const label = document.getElementById("label").value.trim();
+      if (!label) {
+        out.className = "error";
+        out.textContent = "Please enter a label name.";
+        out.hidden = false;
+        submit.disabled = false;
+        submit.textContent = "Scan, save & log";
+        return;
+      }
+
+      let imageFile = null;
+      if (capturedBlob) {
+        imageFile = new File([capturedBlob], "webcam-capture.jpg", { type: "image/jpeg" });
+      } else if (imageInput.files?.[0]) {
+        imageFile = imageInput.files[0];
+      } else {
+        out.className = "error";
+        out.textContent = "Capture a webcam frame or upload a photo first.";
+        out.hidden = false;
+        submit.disabled = false;
+        submit.textContent = "Scan, save & log";
+        return;
+      }
+
+      const data = new FormData();
+      data.append("image", imageFile);
+      data.append("label", label);
+      data.append("grams", document.getElementById("grams").value);
+      data.append("day", document.getElementById("day").value);
+      data.append("meal", document.getElementById("meal").value);
+      const notes = document.getElementById("notes").value.trim();
+      if (notes) data.append("notes", notes);
+
+      try {
+        const response = await fetch("/labels/scan", { method: "POST", body: data });
+        const payload = await response.json();
+        if (!response.ok) {
+          const detail = payload.detail;
+          if (detail && typeof detail === "object" && detail.manual_entry_required) {
+            out.className = "error";
+            out.textContent = detail.message || "Could not read nutrition facts.";
+            out.hidden = false;
+            showManualPanel(detail);
+            return;
+          }
+          throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+        }
+        hideManualPanel();
+        renderSuccess(payload);
+        await refreshSavedLabels();
+        await refreshMicronutrients(microsDay.value);
+      } catch (err) {
+        out.className = "error";
+        out.textContent = err.message || String(err);
+        out.hidden = false;
+      } finally {
+        submit.disabled = false;
+        submit.textContent = "Scan, save & log";
+      }
+    });
+
+    manualSubmit.addEventListener("click", async () => {
+      out.hidden = true;
+      manualSubmit.disabled = true;
+      manualSubmit.textContent = "Saving…";
+
+      const label = document.getElementById("label").value.trim();
+      const body = {
+        label,
+        grams: Number(document.getElementById("grams").value),
+        day: document.getElementById("day").value,
+        meal: document.getElementById("meal").value,
+        notes: document.getElementById("notes").value.trim() || null,
+        serving_size_g: Number(document.getElementById("manual-serving_size_g").value),
+        calories: Number(document.getElementById("manual-calories").value),
+        protein_g: Number(document.getElementById("manual-protein_g").value),
+        carbs_g: Number(document.getElementById("manual-carbs_g").value),
+        fat_g: Number(document.getElementById("manual-fat_g").value),
+        product_name: pendingProductName,
+        raw_text: pendingRawText,
+        micronutrients: collectManualMicros(),
+      };
+
+      try {
+        if (!label) throw new Error("Please enter a label name.");
+        for (const [key, labelName] of MANUAL_FIELDS) {
+          const value = body[key];
+          if (!Number.isFinite(value) || (key === "serving_size_g" ? value <= 0 : value < 0)) {
+            throw new Error(`Enter a valid value for ${labelName}.`);
+          }
+        }
+        const response = await fetch("/labels/manual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          const detail = payload.detail;
+          throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+        }
+        hideManualPanel();
+        renderSuccess(payload);
+        await refreshSavedLabels();
+        await refreshMicronutrients(microsDay.value);
+      } catch (err) {
+        out.className = "error";
+        out.textContent = err.message || String(err);
+        out.hidden = false;
+      } finally {
+        manualSubmit.disabled = false;
+        manualSubmit.textContent = "Save manual facts & log";
+      }
+    });
+
+    refreshSavedLabels();
+    refreshMicronutrients();
+    window.addEventListener("beforeunload", stopWebcam);
+  </script>
+</body>
+</html>
