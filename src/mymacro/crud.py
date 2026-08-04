@@ -1,10 +1,18 @@
 from datetime import date
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from mymacro import models, schemas
+from mymacro.macro_math import calories_from_macros
 from mymacro.micronutrients import normalize_micronutrients
+
+DEFAULT_IDEAL = {
+    "calories": 2000.03,
+    "protein_g": 150.0,
+    "carbs_g": 200.0,
+    "fat_g": 66.67,
+}
 
 
 def create_food(db: Session, payload: schemas.FoodCreate) -> models.Food:
@@ -142,3 +150,56 @@ def update_saved_label(
     db.commit()
     db.refresh(saved)
     return saved
+
+
+def get_or_create_ideal_targets(db: Session) -> models.IdealTargets:
+    existing = db.get(models.IdealTargets, 1)
+    if existing:
+        return existing
+    calories = calories_from_macros(
+        DEFAULT_IDEAL["protein_g"],
+        DEFAULT_IDEAL["carbs_g"],
+        DEFAULT_IDEAL["fat_g"],
+    )
+    row = models.IdealTargets(
+        id=1,
+        calories=calories,
+        protein_g=DEFAULT_IDEAL["protein_g"],
+        carbs_g=DEFAULT_IDEAL["carbs_g"],
+        fat_g=DEFAULT_IDEAL["fat_g"],
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def update_ideal_targets(db: Session, payload: schemas.IdealTargetsUpdate) -> models.IdealTargets:
+    row = get_or_create_ideal_targets(db)
+    computed = calories_from_macros(payload.protein_g, payload.carbs_g, payload.fat_g)
+    if payload.sync_calories_from_macros or payload.calories is None:
+        calories = computed
+    else:
+        calories = float(payload.calories)
+        if abs(calories - computed) > 1.0:
+            raise ValueError(
+                f"Calories ({calories}) must equal protein×4 + carbs×4 + fat×9 "
+                f"(= {computed}). Enable sync or adjust macros."
+            )
+    row.protein_g = payload.protein_g
+    row.carbs_g = payload.carbs_g
+    row.fat_g = payload.fat_g
+    row.calories = calories
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_logged_days(db: Session, limit: int = 60) -> list[tuple[date, int]]:
+    rows = db.execute(
+        select(models.FoodEntry.day, func.count(models.FoodEntry.id))
+        .group_by(models.FoodEntry.day)
+        .order_by(models.FoodEntry.day.desc())
+        .limit(limit)
+    ).all()
+    return [(row[0], int(row[1])) for row in rows]

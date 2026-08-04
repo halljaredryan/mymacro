@@ -1,0 +1,285 @@
+:root {
+      --bg: #0f1410;
+      --panel: #1a221c;
+      --ink: #e8f0e9;
+      --muted: #9aab9d;
+      --accent: #7dbe6a;
+      --accent-ink: #102012;
+      --danger: #e07070;
+      --border: #2c3a2f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #243528 0%, transparent 55%),
+        var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+    }
+    h1 {
+      font-family: "IBM Plex Serif", Georgia, serif;
+      font-weight: 600;
+      font-size: clamp(2rem, 5vw, 2.6rem);
+      margin: 0 0 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      font-size: 1.1rem;
+      margin: 0 0 0.75rem;
+      font-weight: 600;
+    }
+    .lede {
+      color: var(--muted);
+      margin: 0 0 1.75rem;
+      line-height: 1.45;
+    }
+    form, .panel {
+      display: grid;
+      gap: 1rem;
+      padding: 1.25rem;
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid var(--border);
+    }
+    label {
+      display: grid;
+      gap: 0.4rem;
+      font-size: 0.92rem;
+    }
+    input[type="number"],
+    input[type="date"],
+    input[type="text"],
+    input[type="file"],
+    select {
+      width: 100%;
+      padding: 0.7rem 0.8rem;
+      border: 1px solid var(--border);
+      background: #101612;
+      color: var(--ink);
+      font: inherit;
+    }
+    .stage {
+      position: relative;
+      aspect-ratio: 4 / 3;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      background: #101612;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .stage video,
+    .stage img,
+    .stage canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .stage .placeholder {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      text-align: center;
+    }
+    .cam-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .cam-actions button,
+    .secondary {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--border);
+      font: inherit;
+      font-weight: 600;
+      padding: 0.7rem 0.9rem;
+      cursor: pointer;
+    }
+    .cam-actions button.primary,
+    button[type="submit"] {
+      border: 0;
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    @media (max-width: 560px) {
+      .row { grid-template-columns: 1fr; }
+    }
+    button[type="submit"] {
+      font: inherit;
+      font-weight: 600;
+      padding: 0.85rem 1rem;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+    .result, .error {
+      margin-top: 0.25rem;
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      line-height: 1.45;
+    }
+    .error { border-color: var(--danger); color: #ffd0d0; }
+    .macros {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .macros div {
+      padding: 0.65rem 0.4rem;
+      text-align: center;
+      background: #101612;
+      border: 1px solid var(--border);
+    }
+    .macros strong { display: block; font-size: 1.05rem; }
+    .macros span { color: var(--muted); font-size: 0.75rem; }
+    a.doc { color: var(--accent); }
+    .saved-list {
+      display: grid;
+      gap: 0.65rem;
+      margin-top: 1.5rem;
+    }
+    .saved-item {
+      display: grid;
+      gap: 0.45rem;
+      padding: 0.85rem 0.95rem;
+      border: 1px solid var(--border);
+      background: var(--panel);
+    }
+    .saved-item strong { font-size: 1rem; }
+    .saved-item .meta { color: var(--muted); font-size: 0.85rem; }
+    .saved-item .item-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+    }
+    .saved-item .item-actions button {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--border);
+      font: inherit;
+      font-weight: 600;
+      padding: 0.55rem 0.8rem;
+      cursor: pointer;
+    }
+    .saved-item .item-actions button.primary {
+      border: 0;
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+    .reuse-form {
+      display: grid;
+      gap: 0.65rem;
+      margin-top: 0.35rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid var(--border);
+    }
+    .hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
+    .status { color: var(--muted); font-size: 0.85rem; min-height: 1.2em; }
+    .missing-field {
+      outline: 1px solid var(--danger);
+      border-radius: 2px;
+      padding: 0.35rem;
+    }
+    .missing-field input { border-color: var(--danger); }
+    [hidden] { display: none !important; }
+    .micro-list { display: grid; gap: 0.65rem; }
+    .micro-row {
+      display: grid;
+      gap: 0.25rem;
+    }
+    .micro-row header {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      font-size: 0.9rem;
+    }
+    .micro-row .bar {
+      height: 0.55rem;
+      background: #101612;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .micro-row .fill {
+      height: 100%;
+      background: var(--accent);
+    }
+    .micro-row .fill.over { background: #d4a24c; }
+    .micro-optional {
+      display: grid;
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .brand {
+      font-family: "IBM Plex Serif", Georgia, serif;
+      font-size: 1.55rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    nav.tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+    nav.tabs a {
+      text-decoration: none;
+      color: var(--ink);
+      border: 1px solid var(--border);
+      padding: 0.45rem 0.7rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      background: #101612;
+    }
+    nav.tabs a.active {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+    }
+    .eq-box {
+      padding: 0.75rem 0.85rem;
+      border: 1px solid var(--border);
+      background: #101612;
+      font-size: 0.92rem;
+    }
+    .eq-box.ok { border-color: var(--accent); }
+    .eq-box.bad { border-color: var(--danger); color: #ffd0d0; }
+    .log-entry {
+      display: grid;
+      gap: 0.35rem;
+      padding: 0.85rem 0.95rem;
+      border: 1px solid var(--border);
+      background: var(--panel);
+    }
+    .log-entry .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+

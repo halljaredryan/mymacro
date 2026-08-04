@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mymacro — daily logs</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <main>
+    <div id="nav"></div>
+    <h1>Daily logs</h1>
+    <p class="lede">Browse foods logged for any day, with macros toward your targets.</p>
+
+    <section class="panel">
+      <div class="row">
+        <label>
+          Day
+          <input id="day" type="date" />
+        </label>
+        <label>
+          Jump to logged day
+          <select id="day-picker">
+            <option value="">Select…</option>
+          </select>
+        </label>
+      </div>
+      <div id="summary" class="hint">Pick a day to load entries.</div>
+      <div id="entries" class="saved-list"></div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+  <script>
+    MyMacro.mountNav("logs");
+    const dayInput = document.getElementById("day");
+    const dayPicker = document.getElementById("day-picker");
+    const summaryEl = document.getElementById("summary");
+    const entriesEl = document.getElementById("entries");
+    dayInput.value = MyMacro.todayISO();
+
+    function progressLine(consumed, goal) {
+      if (!goal) return "";
+      const parts = [
+        ["kcal", consumed.calories, goal.calories],
+        ["P", consumed.protein_g, goal.protein_g],
+        ["C", consumed.carbs_g, goal.carbs_g],
+        ["F", consumed.fat_g, goal.fat_g],
+      ];
+      return parts
+        .map(([label, c, g]) => {
+          const pct = g ? Math.round((c / g) * 100) : 0;
+          return `${label} ${c}/${g} (${pct}%)`;
+        })
+        .join(" · ");
+    }
+
+    async function loadDayList() {
+      const response = await fetch("/days");
+      const days = await response.json();
+      dayPicker.innerHTML =
+        `<option value="">Select…</option>` +
+        days
+          .map(
+            (item) =>
+              `<option value="${item.day}">${item.day} · ${item.entry_count} items · ${item.consumed.calories} kcal</option>`
+          )
+          .join("");
+    }
+
+    async function loadDay(day) {
+      summaryEl.textContent = "Loading…";
+      entriesEl.innerHTML = "";
+      try {
+        const response = await fetch(`/days/${day}/summary`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Failed to load day");
+        const goalLine = data.goal
+          ? progressLine(data.consumed, data.goal)
+          : `${data.consumed.calories} kcal · P ${data.consumed.protein_g}g · C ${data.consumed.carbs_g}g · F ${data.consumed.fat_g}g`;
+        summaryEl.innerHTML = `<strong>${MyMacro.escapeHtml(day)}</strong><div class="meta" style="color:var(--muted);margin-top:0.35rem">${MyMacro.escapeHtml(goalLine)}</div>`;
+
+        if (!data.entries.length) {
+          entriesEl.innerHTML = `<p class="hint">No foods logged for this day.</p>`;
+          return;
+        }
+        entriesEl.innerHTML = data.entries
+          .map((entry) => {
+            const m = entry.macros;
+            return `
+              <article class="log-entry" data-id="${entry.id}">
+                <strong>${MyMacro.escapeHtml(entry.food.name)}</strong>
+                <div class="meta" style="color:var(--muted);font-size:0.85rem">
+                  ${MyMacro.escapeHtml(entry.meal)} · ${entry.servings} servings ·
+                  ${m.calories} kcal · P ${m.protein_g}g · C ${m.carbs_g}g · F ${m.fat_g}g
+                </div>
+                <div class="meta" style="color:var(--muted);font-size:0.85rem">
+                  ${MyMacro.escapeHtml(entry.notes || "")}
+                </div>
+                <div class="actions">
+                  <button type="button" class="secondary delete-entry" data-id="${entry.id}">Remove</button>
+                </div>
+              </article>`;
+          })
+          .join("");
+      } catch (err) {
+        summaryEl.innerHTML = `<span class="error">${MyMacro.escapeHtml(err.message || String(err))}</span>`;
+      }
+    }
+
+    dayInput.addEventListener("change", () => {
+      dayPicker.value = "";
+      loadDay(dayInput.value);
+    });
+    dayPicker.addEventListener("change", () => {
+      if (!dayPicker.value) return;
+      dayInput.value = dayPicker.value;
+      loadDay(dayPicker.value);
+    });
+
+    entriesEl.addEventListener("click", async (event) => {
+      const btn = event.target.closest(".delete-entry");
+      if (!btn) return;
+      const id = btn.dataset.id;
+      if (!confirm("Remove this log entry?")) return;
+      const response = await fetch(`/entries/${id}`, { method: "DELETE" });
+      if (!response.ok && response.status !== 204) {
+        alert("Failed to delete entry");
+        return;
+      }
+      await loadDayList();
+      await loadDay(dayInput.value);
+    });
+
+    loadDayList().then(() => loadDay(dayInput.value));
+  </script>
+</body>
+</html>
