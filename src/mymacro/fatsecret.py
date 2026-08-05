@@ -1,4 +1,4 @@
-"""FatSecret barcode lookup client."""
+"""FatSecret barcode lookup client (OAuth 1.0 + OAuth 2.0 fallback)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
+from requests_oauthlib import OAuth1Session
 
 from mymacro.config import settings
 from mymacro.micronutrients import normalize_micronutrients
@@ -43,7 +44,123 @@ _MICRO_MAP = {
 }
 
 
-class HttpFatSecretClient:
+def _normalize_barcode(barcode: str) -> str:
+    digits = "".join(ch for ch in barcode.strip() if ch.isdigit())
+    if not digits:
+        raise FatSecretError("barcode is required")
+    # FatSecret expects GTIN-13 (left-pad with zeros).
+    if len(digits) < 13:
+        digits = digits.zfill(13)
+    return digits
+
+
+def _facts_from_food_payload(food: dict, *, barcode: str, food_id: str) -> NutritionFacts:
+    food_name = food.get("food_name") or f"Barcode {barcode}"
+    servings_block = (food.get("servings") or {}).get("serving")
+    if isinstance(servings_block, list):
+        serving = servings_block[0]
+    else:
+        serving = servings_block or {}
+
+    metric_amount = serving.get("metric_serving_amount") or serving.get("number_of_units")
+    metric_unit = (serving.get("metric_serving_unit") or "g").lower()
+    if metric_unit in {"g", "gram", "grams"}:
+        serving_size_g = float(metric_amount or 100)
+    else:
+        serving_size_g = 100.0
+
+    facts = NutritionFacts(
+        product_name=food_name,
+        serving_size_g=max(serving_size_g, 1.0),
+        calories=float(serving.get("calories") or 0),
+        protein_g=float(serving.get("protein") or 0),
+        carbs_g=float(serving.get("carbohydrate") or 0),
+        fat_g=float(serving.get("fat") or 0),
+        micronutrients=normalize_micronutrients(
+            {
+                key_out: serving.get(key_in)
+                for key_in, key_out in _MICRO_MAP.items()
+                if serving.get(key_in) not in (None, "")
+            }
+        ),
+        raw_text=f"fatsecret:barcode={barcode};food_id={food_id}",
+    )
+    if facts.calories <= 0 and facts.protein_g == 0 and facts.carbs_g == 0 and facts.fat_g == 0:
+        raise FatSecretError("FatSecret response missing nutrition data")
+    return facts
+
+
+def _extract_food_id(lookup: dict) -> str | None:
+    food_id = (
+        lookup.get("food_id")
+        or lookup.get("food", {}).get("food_id")
+        or lookup.get("foods", {}).get("food", {}).get("food_id")
+    )
+    return str(food_id) if food_id else None
+
+
+def _raise_if_error(payload: dict) -> None:
+    err = payload.get("error")
+    if not err:
+        return
+    message = err.get("message") if isinstance(err, dict) else str(err)
+    code = err.get("code") if isinstance(err, dict) else "unknown"
+    raise FatSecretError(f"FatSecret API error ({code}): {message}")
+
+
+class OAuth1FatSecretClient:
+    """Consumer key/secret auth (FatSecret OAuth 1.0)."""
+
+    def __init__(self, consumer_key: str, consumer_secret: str) -> None:
+        self.consumer_key = consumer_key
+        self.consumer_secret = consumer_secret
+
+    def _api_get(self, params: dict[str, str]) -> dict:
+        oauth = OAuth1Session(self.consumer_key, client_secret=self.consumer_secret)
+        response = oauth.get(
+            settings.fatsecret_api_url,
+            params={"format": "json", **params},
+            timeout=30,
+        )
+        if response.status_code >= 400:
+            raise FatSecretError(f"FatSecret API error: {response.status_code}")
+        payload = response.json()
+        _raise_if_error(payload)
+        return payload
+
+    def nutrition_for_barcode(self, barcode: str) -> NutritionFacts:
+        barcode = _normalize_barcode(barcode)
+        lookup = None
+        last_error: Exception | None = None
+        for method in ("food.find_id_for_barcode", "food.find_id_for_barcode.v2"):
+            try:
+                lookup = self._api_get({"method": method, "barcode": barcode})
+                break
+            except FatSecretError as exc:
+                last_error = exc
+        if lookup is None:
+            raise FatSecretError(
+                str(last_error) if last_error else "FatSecret barcode lookup failed"
+            )
+
+        food_id = _extract_food_id(lookup)
+        if not food_id:
+            raise FatSecretError("No FatSecret food found for barcode")
+
+        data = self._api_get(
+            {
+                "method": "food.get.v4",
+                "food_id": food_id,
+                "include_food_images": "false",
+            }
+        )
+        food = data.get("food") or data
+        return _facts_from_food_payload(food, barcode=barcode, food_id=food_id)
+
+
+class OAuth2FatSecretClient:
+    """Client ID/secret auth (FatSecret OAuth 2.0 client credentials)."""
+
     def __init__(self, client_id: str, client_secret: str) -> None:
         self.client_id = client_id
         self.client_secret = client_secret
@@ -74,87 +191,58 @@ class HttpFatSecretClient:
 
     def _api_get(self, params: dict[str, str]) -> dict:
         token = self._access_token()
-        all_params = {
-            "format": "json",
-            **params,
-        }
         with httpx.Client(timeout=30) as client:
             response = client.get(
                 settings.fatsecret_api_url,
-                params=all_params,
+                params={"format": "json", **params},
                 headers={"Authorization": f"Bearer {token}"},
             )
         if response.status_code >= 400:
             raise FatSecretError(f"FatSecret API error: {response.status_code}")
         payload = response.json()
-        err = payload.get("error")
-        if err:
-            message = err.get("message") if isinstance(err, dict) else str(err)
-            code = err.get("code") if isinstance(err, dict) else "unknown"
-            raise FatSecretError(f"FatSecret API error ({code}): {message}")
+        _raise_if_error(payload)
         return payload
 
     def nutrition_for_barcode(self, barcode: str) -> NutritionFacts:
-        barcode = barcode.strip()
-        if not barcode:
-            raise FatSecretError("barcode is required")
-
+        barcode = _normalize_barcode(barcode)
         lookup = self._api_get(
             {
                 "method": "food.find_id_for_barcode",
                 "barcode": barcode,
             }
         )
-        food_id = (
-            lookup.get("food_id")
-            or lookup.get("food", {}).get("food_id")
-            or lookup.get("foods", {}).get("food", {}).get("food_id")
-        )
+        food_id = _extract_food_id(lookup)
         if not food_id:
             raise FatSecretError("No FatSecret food found for barcode")
 
         data = self._api_get(
             {
                 "method": "food.get.v4",
-                "food_id": str(food_id),
+                "food_id": food_id,
                 "include_food_images": "false",
             }
         )
         food = data.get("food") or data
-        food_name = food.get("food_name") or f"Barcode {barcode}"
+        return _facts_from_food_payload(food, barcode=barcode, food_id=food_id)
 
-        servings_block = (food.get("servings") or {}).get("serving")
-        if isinstance(servings_block, list):
-            serving = servings_block[0]
-        else:
-            serving = servings_block or {}
 
-        metric_amount = serving.get("metric_serving_amount") or serving.get("number_of_units")
-        metric_unit = (serving.get("metric_serving_unit") or "g").lower()
-        if metric_unit in {"g", "gram", "grams"}:
-            serving_size_g = float(metric_amount or 100)
-        else:
-            serving_size_g = 100.0
+class HttpFatSecretClient:
+    """Prefer OAuth1 consumer credentials; fall back to OAuth2 if needed."""
 
-        facts = NutritionFacts(
-            product_name=food_name,
-            serving_size_g=max(serving_size_g, 1.0),
-            calories=float(serving.get("calories") or 0),
-            protein_g=float(serving.get("protein") or 0),
-            carbs_g=float(serving.get("carbohydrate") or 0),
-            fat_g=float(serving.get("fat") or 0),
-            micronutrients=normalize_micronutrients(
-                {
-                    key_out: serving.get(key_in)
-                    for key_in, key_out in _MICRO_MAP.items()
-                    if serving.get(key_in) not in (None, "")
-                }
-            ),
-            raw_text=f"fatsecret:barcode={barcode};food_id={food_id}",
-        )
-        if facts.calories <= 0 and facts.protein_g == 0 and facts.carbs_g == 0 and facts.fat_g == 0:
-            raise FatSecretError("FatSecret response missing nutrition data")
-        return facts
+    def __init__(self, consumer_key: str, consumer_secret: str) -> None:
+        self.oauth1 = OAuth1FatSecretClient(consumer_key, consumer_secret)
+        self.oauth2 = OAuth2FatSecretClient(consumer_key, consumer_secret)
+
+    def nutrition_for_barcode(self, barcode: str) -> NutritionFacts:
+        try:
+            return self.oauth1.nutrition_for_barcode(barcode)
+        except FatSecretError as oauth1_error:
+            try:
+                return self.oauth2.nutrition_for_barcode(barcode)
+            except FatSecretError as oauth2_error:
+                raise FatSecretError(
+                    f"{oauth1_error}; OAuth2 fallback: {oauth2_error}"
+                ) from oauth2_error
 
 
 _client: FatSecretClient | None = None
