@@ -85,8 +85,7 @@ def _facts_from_food_payload(food: dict, *, barcode: str, food_id: str) -> Nutri
         ),
         raw_text=f"fatsecret:barcode={barcode};food_id={food_id}",
     )
-    if facts.calories <= 0 and facts.protein_g == 0 and facts.carbs_g == 0 and facts.fat_g == 0:
-        raise FatSecretError("FatSecret response missing nutrition data")
+    # Zero-calorie items (e.g. water) are valid when FatSecret returned a product.
     return facts
 
 
@@ -96,7 +95,14 @@ def _extract_food_id(lookup: dict) -> str | None:
         or lookup.get("food", {}).get("food_id")
         or lookup.get("foods", {}).get("food", {}).get("food_id")
     )
-    return str(food_id) if food_id else None
+    if isinstance(food_id, dict):
+        food_id = food_id.get("value")
+    if food_id is None or food_id == "":
+        return None
+    food_id_str = str(food_id).strip()
+    if food_id_str in {"0", "None"}:
+        return None
+    return food_id_str
 
 
 def _raise_if_error(payload: dict) -> None:
