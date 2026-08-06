@@ -65,4 +65,6 @@ def test_barcode_page(client):
     assert response.status_code == 200
     assert "Barcode lookup" in response.text
     assert "BarcodeDetector" in response.text
+    assert "@zxing/library" in response.text
+    assert "BrowserMultiFormatReader" in response.text
     assert "/barcode/lookup" in response.text

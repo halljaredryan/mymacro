@@ -64,6 +64,7 @@
   </main>
 
   <script src="/static/app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
   <script>
     MyMacro.mountNav("barcode");
     const barcodeInput = document.getElementById("barcode");
@@ -84,50 +85,107 @@
     let stream = null;
     let detector = null;
     let rafId = null;
+    let zxingReader = null;
+    let scanMode = null; // "native" | "zxing"
+    let lastDetected = "";
 
     function setStatus(msg) { statusEl.textContent = msg || ""; }
 
-    async function scanLoop() {
+    function onDetected(value) {
+      const code = String(value || "").trim();
+      if (!code || code === lastDetected) return;
+      lastDetected = code;
+      barcodeInput.value = code;
+      setStatus(`Detected barcode: ${code}`);
+    }
+
+    async function nativeScanLoop() {
       if (!detector || !camera || camera.readyState < 2) {
-        rafId = requestAnimationFrame(scanLoop);
+        rafId = requestAnimationFrame(nativeScanLoop);
         return;
       }
       try {
         const codes = await detector.detect(camera);
-        if (codes.length) {
-          const value = codes[0].rawValue || "";
-          if (value) {
-            barcodeInput.value = value;
-            setStatus(`Detected barcode: ${value}`);
-          }
-        }
+        if (codes.length) onDetected(codes[0].rawValue || "");
       } catch (err) {
         setStatus(`Scan error: ${err.message || err}`);
       }
-      rafId = requestAnimationFrame(scanLoop);
+      rafId = requestAnimationFrame(nativeScanLoop);
+    }
+
+    async function startNativeDetector() {
+      if (!("BarcodeDetector" in window)) return false;
+      try {
+        detector = new BarcodeDetector({
+          formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "qr_code"],
+        });
+      } catch {
+        try {
+          detector = new BarcodeDetector();
+        } catch {
+          return false;
+        }
+      }
+      scanMode = "native";
+      rafId = requestAnimationFrame(nativeScanLoop);
+      setStatus("Camera scanning (native)… hold barcode in frame.");
+      return true;
+    }
+
+    async function startZxingDetector() {
+      if (!window.ZXing || !ZXing.BrowserMultiFormatReader) {
+        throw new Error(
+          "Barcode scanner library failed to load. Enter the barcode manually, or check your network."
+        );
+      }
+      zxingReader = new ZXing.BrowserMultiFormatReader();
+      scanMode = "zxing";
+      await zxingReader.decodeFromVideoDevice(
+        undefined,
+        camera,
+        (result, err) => {
+          if (result) onDetected(result.getText());
+          // NotFoundException is expected while searching frames.
+          if (err && !(err instanceof ZXing.NotFoundException)) {
+            // Keep scanning; only surface unexpected errors once.
+            if (!String(statusEl.textContent || "").startsWith("Detected")) {
+              setStatus(`Scanning… (${err.name || "waiting for barcode"})`);
+            }
+          }
+        }
+      );
+      setStatus("Camera scanning… hold barcode in frame.");
+      return true;
     }
 
     async function startScan() {
-      if (!("BarcodeDetector" in window)) {
-        setStatus("BarcodeDetector API unavailable. Enter barcode manually.");
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setStatus("Camera API unavailable in this browser. Enter barcode manually.");
         return;
       }
+      lastDetected = "";
       try {
-        detector = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
-      } catch {
-        detector = new BarcodeDetector();
-      }
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        // Prefer native detector when present; otherwise fall back to ZXing.
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
         camera.srcObject = stream;
         await camera.play();
         camera.hidden = false;
         placeholder.hidden = true;
         startBtn.disabled = true;
         stopBtn.disabled = false;
-        setStatus("Camera scanning… hold barcode in frame.");
-        rafId = requestAnimationFrame(scanLoop);
+
+        const startedNative = await startNativeDetector();
+        if (!startedNative) {
+          // ZXing attaches its own stream to the video element.
+          for (const track of stream.getTracks()) track.stop();
+          stream = null;
+          await startZxingDetector();
+        }
       } catch (err) {
+        stopScan();
         setStatus(`Could not start scanner: ${err.message || err}`);
       }
     }
@@ -135,15 +193,27 @@
     function stopScan() {
       if (rafId) cancelAnimationFrame(rafId);
       rafId = null;
+      detector = null;
+      if (zxingReader) {
+        try { zxingReader.reset(); } catch (_) {}
+        zxingReader = null;
+      }
       if (stream) {
         for (const t of stream.getTracks()) t.stop();
         stream = null;
       }
-      camera.srcObject = null;
+      if (camera.srcObject) {
+        const media = camera.srcObject;
+        if (media.getTracks) {
+          for (const t of media.getTracks()) t.stop();
+        }
+        camera.srcObject = null;
+      }
       camera.hidden = true;
       placeholder.hidden = false;
       startBtn.disabled = false;
       stopBtn.disabled = true;
+      scanMode = null;
     }
 
     startBtn.addEventListener("click", startScan);
